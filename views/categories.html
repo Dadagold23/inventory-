@@ -1,0 +1,147 @@
+<?php
+$pageHeading = 'Product Categories';
+$pageEyebrow = 'Inventory';
+$pageDescription = 'Organise the product and service taxonomy. Categories are deactivated, never deleted.';
+$activeNav = 'categories';
+
+$pageActions = '<span class="badge bg-secondary align-self-center">' . count($allCategories) . ' total</span>'
+    . '<span class="badge bg-success align-self-center">' . (int) $activeCount . ' active</span>';
+
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <?php $editingCategory = !empty($category); ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold"><?php echo $editingCategory ? 'Edit category' : 'Create category'; ?></div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/categories?action=list')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_category">
+                                <input type="hidden" name="category_id" value="<?php echo $editingCategory ? (int) $category['category_id'] : 0; ?>">
+                                <div class="mb-3">
+                                    <label class="form-label" for="category_name">Name <span class="text-danger">*</span></label>
+                                    <input class="form-control" id="category_name" name="category_name" required maxlength="80"
+                                           value="<?php echo e($editingCategory ? $category['name'] : ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="category_parent">Parent category</label>
+                                    <select class="form-select" id="category_parent" name="category_parent">
+                                        <option value="0">— None (top level) —</option>
+                                        <?php foreach ($parentOptions as $parentOption): ?>
+                                        <option value="<?php echo (int) $parentOption['category_id']; ?>"
+                                            <?php echo $editingCategory && (int) ($category['parent_id'] ?? 0) === (int) $parentOption['category_id'] ? 'selected' : ''; ?>>
+                                            <?php echo str_repeat('&mdash; ', (int) $parentOption['depth']); ?><?php echo e($parentOption['name']); ?>
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">A category cannot sit under itself or one of its own subcategories.</div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="category_sort_order">Sort order</label>
+                                        <input class="form-control" type="number" id="category_sort_order" name="category_sort_order" min="0" max="65535"
+                                               value="<?php echo $editingCategory ? (int) $category['sort_order'] : 0; ?>">
+                                    </div>
+                                    <div class="col-6 d-flex align-items-end">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="category_active" name="category_active" value="1"
+                                                   <?php echo (!$editingCategory || (int) $category['is_active'] === 1) ? 'checked' : ''; ?>>
+                                            <label class="form-check-label" for="category_active">Active</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i><?php echo $editingCategory ? 'Update category' : 'Create category'; ?></button>
+                                    <?php if ($editingCategory): ?>
+                                    <a class="btn btn-outline-secondary" href="<?php echo e(url('/categories?action=list')); ?>">Cancel</a>
+                                    <?php endif; ?>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="alert alert-secondary mt-3 small mb-0">
+                        <i class="fas fa-circle-info me-1"></i>
+                        Categories are soft-deactivated. A category that still has products attached cannot be deactivated
+                        until those products are moved to another category.
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Categories</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Name</th>
+                                        <th>Parent</th>
+                                        <th class="text-end">Products</th>
+                                        <th class="text-end">Sub</th>
+                                        <th class="text-end">Sort</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($allCategories === []): ?>
+                                    <tr><td colspan="8" class="text-center text-muted py-4">No categories yet. Create the first one on the left.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($allCategories as $index => $catRow): ?>
+                                    <?php
+                                    $catProductId = (int) $catRow['category_id'];
+                                    $catProducts = (int) $catRow['product_count'];
+                                    $catChildren = (int) $catRow['child_count'];
+                                    $catActive = (int) $catRow['is_active'] === 1;
+                                    ?>
+                                    <tr>
+                                        <td><?php echo $index + 1; ?></td>
+                                        <td><?php echo e($catRow['name']); ?></td>
+                                        <td><?php echo e($catRow['parent_name'] ?? '—'); ?></td>
+                                        <td class="text-end"><?php echo $catProducts; ?></td>
+                                        <td class="text-end"><?php echo $catChildren; ?></td>
+                                        <td class="text-end"><?php echo (int) $catRow['sort_order']; ?></td>
+                                        <td><span class="badge bg-<?php echo $catActive ? 'success' : 'secondary'; ?>"><?php echo $catActive ? 'Active' : 'Inactive'; ?></span></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" title="Edit category" href="<?php echo e(url('/categories?action=edit&category_id=' . $catProductId)); ?>"><i class="fas fa-edit"></i></a>
+                                            <?php if ($catActive): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/categories?action=list')); ?>"
+                                                  onsubmit="return confirm('Deactivate category <?php echo e($catRow['name']); ?>?');">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="deactivate_category">
+                                                <input type="hidden" name="category_id" value="<?php echo $catProductId; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-<?php echo $catProducts > 0 ? 'secondary' : 'danger'; ?>"
+                                                        title="<?php echo $catProducts > 0
+                                                            ? 'Blocked: ' . $catProducts . ' product(s) still use this category'
+                                                            : 'Deactivate category'; ?>">
+                                                    <i class="fas fa-power-off"></i>
+                                                </button>
+                                            </form>
+                                            <?php else: ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/categories?action=list')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="activate_category">
+                                                <input type="hidden" name="category_id" value="<?php echo $catProductId; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Activate category">
+                                                    <i class="fas fa-power-off"></i>
+                                                </button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+<?php require APP_ROOT . '/views/layout/footer.php'; ?>

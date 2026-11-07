@@ -1,0 +1,369 @@
+<?php
+$pageHeading = 'Payroll';
+$pageEyebrow = 'Workforce';
+$pageDescription = 'Employees, payroll runs, earnings, deductions and tax lines.';
+$activeNav = 'payroll';
+ob_start();
+?>
+<span class="badge bg-success align-self-center"><?php echo $activeEmployeeCount; ?> active employees</span>
+<span class="badge bg-secondary align-self-center"><?php echo $draftRunCount; ?> draft runs</span>
+<span class="badge bg-info text-dark align-self-center"><?php echo $processedRunCount; ?> processed</span>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item"><a class="nav-link <?php echo $view === 'employees' ? 'active' : ''; ?>" href="<?php echo e(url('/payroll?action=employees')); ?>">Employees</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $view === 'runs' ? 'active' : ''; ?>" href="<?php echo e(url('/payroll?action=runs')); ?>">Payroll Runs</a></li>
+            </ul>
+
+            <?php if ($view === 'employees'): ?>
+            <?php $editing = !empty($employee); ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold"><?php echo $editing ? 'Edit employee' : 'Add employee'; ?></div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/payroll?action=employees')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_employee">
+                                <input type="hidden" name="employee_id" value="<?php echo $editing ? (int) $employee['employee_id'] : 0; ?>">
+                                <div class="mb-3">
+                                    <label class="form-label" for="employee_code">Employee code</label>
+                                    <input class="form-control" id="employee_code" name="employee_code" maxlength="50" value="<?php echo e($editing ? $employee['employee_code'] : ''); ?>" placeholder="Auto-generated when blank">
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="first_name">First name <span class="text-danger">*</span></label>
+                                        <input class="form-control" id="first_name" name="first_name" required maxlength="50" value="<?php echo e($editing ? $employee['first_name'] : ''); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="last_name">Last name <span class="text-danger">*</span></label>
+                                        <input class="form-control" id="last_name" name="last_name" required maxlength="50" value="<?php echo e($editing ? $employee['last_name'] : ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="email">Email</label>
+                                        <input class="form-control" type="email" id="email" name="email" maxlength="100" value="<?php echo e($editing ? ($employee['email'] ?? '') : ''); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="phone">Phone</label>
+                                        <input class="form-control" id="phone" name="phone" maxlength="20" value="<?php echo e($editing ? ($employee['phone'] ?? '') : ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="hire_date">Hire date</label>
+                                        <input class="form-control" type="date" id="hire_date" name="hire_date" value="<?php echo e($editing ? $employee['hire_date'] : date('Y-m-d')); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="termination_date">Termination date</label>
+                                        <input class="form-control" type="date" id="termination_date" name="termination_date" value="<?php echo e($editing ? ($employee['termination_date'] ?? '') : ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="employment_type">Employment type</label>
+                                    <select class="form-select" id="employment_type" name="employment_type">
+                                        <?php foreach (['full_time' => 'Full time', 'part_time' => 'Part time', 'contract' => 'Contract'] as $value => $label): ?>
+                                        <option value="<?php echo e($value); ?>" <?php echo $editing && $employee['employment_type'] === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="hourly_rate">Hourly rate</label>
+                                        <input class="form-control" type="number" step="0.0001" min="0" id="hourly_rate" name="hourly_rate" value="<?php echo $editing ? e(number_format((float) $employee['hourly_rate'], 4, '.', '')) : '0.0000'; ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="salary">Salary</label>
+                                        <input class="form-control" type="number" step="0.0001" min="0" id="salary" name="salary" value="<?php echo $editing ? e(number_format((float) $employee['salary'], 4, '.', '')) : '0.0000'; ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="tax_id">Tax ID</label>
+                                    <input class="form-control" id="tax_id" name="tax_id" maxlength="20" value="<?php echo e($editing ? ($employee['tax_id'] ?? '') : ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="address">Address</label>
+                                    <textarea class="form-control" id="address" name="address" rows="2"><?php echo e($editing ? ($employee['address'] ?? '') : ''); ?></textarea>
+                                </div>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" <?php echo (!$editing || (int) $employee['is_active'] === 1) ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="is_active">Active</label>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i><?php echo $editing ? 'Update employee' : 'Create employee'; ?></button>
+                                    <?php if ($editing): ?>
+                                    <a class="btn btn-outline-secondary" href="<?php echo e(url('/payroll?action=employees')); ?>">Cancel</a>
+                                    <?php endif; ?>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Employees</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Name</th>
+                                        <th>Type</th>
+                                        <th>Hired</th>
+                                        <th class="text-end">Pay</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($employees === []): ?>
+                                    <tr><td colspan="7" class="text-center text-muted py-4">No employees yet. Add the first employee on the left.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($employees as $employeeRow): ?>
+                                    <tr>
+                                        <td><span class="font-monospace small"><?php echo e($employeeRow['employee_code']); ?></span></td>
+                                        <td>
+                                            <?php echo e($employeeRow['last_name'] . ', ' . $employeeRow['first_name']); ?>
+                                            <?php if (!empty($employeeRow['email'])): ?><div class="small text-muted"><?php echo e($employeeRow['email']); ?></div><?php endif; ?>
+                                        </td>
+                                        <td><?php echo e(str_replace('_', ' ', $employeeRow['employment_type'])); ?></td>
+                                        <td><?php echo e(date('M d, Y', strtotime($employeeRow['hire_date']))); ?></td>
+                                        <td class="text-end">
+                                            <?php if ((float) $employeeRow['salary'] > 0): ?>
+                                            <?php echo formatPrice((float) $employeeRow['salary']); ?><div class="small text-muted">salary</div>
+                                            <?php else: ?>
+                                            <?php echo formatPrice((float) $employeeRow['hourly_rate']); ?><div class="small text-muted">hourly</div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><span class="badge bg-<?php echo (int) $employeeRow['is_active'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $employeeRow['is_active'] === 1 ? 'Active' : 'Inactive'; ?></span></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/payroll?action=employees&employee_id=' . (int) $employeeRow['employee_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/payroll?action=employees')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="toggle_employee">
+                                                <input type="hidden" name="employee_id" value="<?php echo (int) $employeeRow['employee_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-<?php echo (int) $employeeRow['is_active'] === 1 ? 'danger' : 'success'; ?>" title="<?php echo (int) $employeeRow['is_active'] === 1 ? 'Deactivate' : 'Activate'; ?>">
+                                                    <i class="fas fa-power-off"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($view === 'runs'): ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Create payroll run</div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/payroll?action=runs')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="create_run">
+                                <div class="mb-3">
+                                    <label class="form-label" for="run_date">Run date</label>
+                                    <input class="form-control" type="date" id="run_date" name="run_date" value="<?php echo e(date('Y-m-d')); ?>">
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="period_start">Period start</label>
+                                        <input class="form-control" type="date" id="period_start" name="period_start" value="<?php echo e(date('Y-m-01')); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="period_end">Period end</label>
+                                        <input class="form-control" type="date" id="period_end" name="period_end" value="<?php echo e(date('Y-m-t')); ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="notes">Notes</label>
+                                    <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-2"></i>Create run</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Payroll runs</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Run date</th>
+                                        <th>Period</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Lines</th>
+                                        <th class="text-end">Gross</th>
+                                        <th class="text-end">Net</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($payrollRuns === []): ?>
+                                    <tr><td colspan="7" class="text-center text-muted py-4">No payroll runs yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($payrollRuns as $run): ?>
+                                    <tr>
+                                        <td><?php echo e(date('M d, Y', strtotime($run['run_date']))); ?></td>
+                                        <td><?php echo e(date('M d', strtotime($run['period_start'])) . ' – ' . date('M d, Y', strtotime($run['period_end']))); ?></td>
+                                        <td><span class="badge bg-<?php echo $run['status'] === 'processed' ? 'success' : ($run['status'] === 'reversed' ? 'danger' : 'secondary'); ?>"><?php echo e(ucfirst($run['status'])); ?></span></td>
+                                        <td class="text-end"><?php echo (int) $run['line_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $run['gross_total']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $run['net_total']); ?></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/payroll?action=runs&run_id=' . (int) $run['run_id'])); ?>">View</a>
+                                            <?php if ($run['status'] === 'draft'): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/payroll?action=runs')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="process_run">
+                                                <input type="hidden" name="run_id" value="<?php echo (int) $run['run_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-success">Process</button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($selectedRun !== []): ?>
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <span class="fw-semibold">Run #<?php echo (int) $selectedRun['run_id']; ?></span>
+                        <span class="badge bg-<?php echo $selectedRun['status'] === 'processed' ? 'success' : ($selectedRun['status'] === 'reversed' ? 'danger' : 'secondary'); ?> ms-2"><?php echo e(ucfirst($selectedRun['status'])); ?></span>
+                        <div class="small text-muted mt-1">
+                            <?php echo e(date('M d, Y', strtotime($selectedRun['period_start'])) . ' – ' . date('M d, Y', strtotime($selectedRun['period_end']))); ?>
+                            <?php if (!empty($selectedRun['created_by_name'])): ?> &middot; created by <?php echo e($selectedRun['created_by_name']); ?><?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <?php if ($selectedRun['status'] === 'draft'): ?>
+                        <form method="POST" action="<?php echo e(url('/payroll?action=runs')); ?>" data-confirm="Process this payroll run? No further lines can be added.">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="action" value="process_run">
+                            <input type="hidden" name="run_id" value="<?php echo (int) $selectedRun['run_id']; ?>">
+                            <button type="submit" class="btn btn-success"><i class="fas fa-check me-2"></i>Process run</button>
+                        </form>
+                        <?php elseif ($selectedRun['status'] === 'processed'): ?>
+                        <form method="POST" action="<?php echo e(url('/payroll?action=runs')); ?>" data-confirm="Reverse this payroll run?">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="action" value="reverse_run">
+                            <input type="hidden" name="run_id" value="<?php echo (int) $selectedRun['run_id']; ?>">
+                            <button type="submit" class="btn btn-outline-danger"><i class="fas fa-undo me-2"></i>Reverse run</button>
+                        </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-6 col-lg-3"><div class="border rounded p-3"><div class="text-muted small">Gross</div><div class="h5 mb-0"><?php echo formatPrice((float) $runTotals['gross_total']); ?></div></div></div>
+                        <div class="col-6 col-lg-3"><div class="border rounded p-3"><div class="text-muted small">Deductions</div><div class="h5 mb-0"><?php echo formatPrice((float) $runTotals['deduction_total']); ?></div></div></div>
+                        <div class="col-6 col-lg-3"><div class="border rounded p-3"><div class="text-muted small">Tax</div><div class="h5 mb-0"><?php echo formatPrice((float) $runTotals['tax_total']); ?></div></div></div>
+                        <div class="col-6 col-lg-3"><div class="border rounded p-3"><div class="text-muted small">Net</div><div class="h5 mb-0"><?php echo formatPrice((float) $runTotals['net_total']); ?></div></div></div>
+                    </div>
+
+                    <?php if ($selectedRun['status'] === 'draft'): ?>
+                    <?php if ($activeEmployees === []): ?>
+                    <div class="alert alert-warning">Add an active employee before adding payroll lines.</div>
+                    <?php else: ?>
+                    <form class="row g-2 align-items-end mb-3" method="POST" action="<?php echo e(url('/payroll?action=runs&run_id=' . (int) $selectedRun['run_id'])); ?>">
+                        <?php echo csrf_field(); ?>
+                        <input type="hidden" name="action" value="add_line">
+                        <input type="hidden" name="run_id" value="<?php echo (int) $selectedRun['run_id']; ?>">
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="employee_id">Employee</label>
+                            <select class="form-select" id="employee_id" name="employee_id" required>
+                                <?php foreach ($activeEmployees as $employeeRow): ?>
+                                <option value="<?php echo (int) $employeeRow['employee_id']; ?>"><?php echo e($employeeRow['last_name'] . ', ' . $employeeRow['first_name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="description">Description</label>
+                            <input class="form-control" id="description" name="description" maxlength="100" required placeholder="e.g. November salary">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label" for="type">Type</label>
+                            <select class="form-select" id="type" name="type">
+                                <option value="earning">Earning</option>
+                                <option value="deduction">Deduction</option>
+                                <option value="tax">Tax</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label" for="amount">Amount</label>
+                            <input class="form-control" type="number" step="0.0001" min="0.0001" id="amount" name="amount" required>
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <button type="submit" class="btn btn-primary w-100">Add line</button>
+                        </div>
+                    </form>
+                    <?php endif; ?>
+                    <?php endif; ?>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Description</th>
+                                    <th>Type</th>
+                                    <th class="text-end">Amount</th>
+                                    <?php if ($selectedRun['status'] === 'draft'): ?><th class="text-end">Action</th><?php endif; ?>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if ($runLines === []): ?>
+                                <tr><td colspan="<?php echo $selectedRun['status'] === 'draft' ? 5 : 4; ?>" class="text-center text-muted py-3">No lines in this run.</td></tr>
+                                <?php endif; ?>
+                                <?php foreach ($runLines as $line): ?>
+                                <tr>
+                                    <td><?php echo e(trim(($line['last_name'] ?? '') . ', ' . ($line['first_name'] ?? ''), ', ')); ?><div class="small text-muted"><?php echo e($line['employee_code'] ?? ''); ?></div></td>
+                                    <td><?php echo e($line['description']); ?></td>
+                                    <td><span class="badge bg-<?php echo $line['type'] === 'earning' ? 'success' : ($line['type'] === 'tax' ? 'info text-dark' : 'warning text-dark'); ?>"><?php echo e(ucfirst($line['type'])); ?></span></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td>
+                                    <?php if ($selectedRun['status'] === 'draft'): ?>
+                                    <td class="text-end">
+                                        <form class="d-inline" method="POST" action="<?php echo e(url('/payroll?action=runs&run_id=' . (int) $selectedRun['run_id'])); ?>">
+                                            <?php echo csrf_field(); ?>
+                                            <input type="hidden" name="action" value="delete_line">
+                                            <input type="hidden" name="run_id" value="<?php echo (int) $selectedRun['run_id']; ?>">
+                                            <input type="hidden" name="line_id" value="<?php echo (int) $line['line_id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                    <?php endif; ?>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+            <?php endif; ?>
+<?php require APP_ROOT . '/views/layout/footer.php'; ?>

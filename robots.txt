@@ -1,0 +1,31 @@
+User-agent: *
+Allow: /
+
+# Allow specific sections of the application
+Allow: /index.php
+Allow: /dashboard
+Allow: /inventory
+Allow: /sales
+Allow: /payments
+Allow: /tax
+Allow: /payroll
+Allow: /tax
+Allow: /audit
+Allow: /system_settings
+Allow: /users
+
+# Disallow administration and sensitive areas
+Disallow: /index.php?action=manage*
+Disallow: /inventory?action=manage*
+Disallow: /payment_*?action=manage*
+Disallow: /payroll?action=manage*
+Disallow: /tax?action=manage*
+Disallow: /audit?action=manage*
+Disallow: /settings?action=manage*
+Disallow: /users*&action=manage*
+
+# Disallow internal PHP files
+Disallow: /*.php$
+
+# Sitemap location
+Sitemap: http://localhost/inventory/sitemap.xml

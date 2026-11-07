@@ -1,0 +1,441 @@
+<?php
+$pageHeading = 'QR Code Scan-to-Pay';
+$pageEyebrow = 'Administration';
+$pageDescription = 'Create the QR codes customers scan to reach your payment destination. A point can be limited to a branch and a tender, and can carry a fixed amount or leave the amount open. The QR is drawn from the stored link every time it is shown, so a printed code always matches the record here.';
+$activeNav = 'qr_payments';
+
+$canCreate = can('qr_payments', 'create');
+$canUpdate = can('qr_payments', 'update');
+$canDelete = can('qr_payments', 'delete');
+
+$totalPoints = count($points);
+$activePoints = count(array_filter($points, static fn (array $point): bool => (int) $point['is_active'] === 1));
+$fixedPoints = count(array_filter($points, static fn (array $point): bool => (string) ($point['amount_type'] ?? 'open') === 'fixed'));
+$openPoints = $totalPoints - $fixedPoints;
+
+ob_start();
+?>
+<span class="badge bg-secondary align-self-center"><?php echo $totalPoints; ?> points</span>
+<span class="badge bg-success align-self-center"><?php echo $activePoints; ?> active</span>
+<?php
+$pageActions = ob_get_clean();
+
+require APP_ROOT . '/views/layout/header.php';
+
+$editing = !empty($editingPoint['qr_point_id']);
+// A failed save is kept in the session; put it back into the form the
+// administrator was actually working on, not the other one.
+if ($editing && $oldPoint !== [] && (int) ($oldPoint['qr_point_id'] ?? 0) === (int) $editingPoint['qr_point_id']) {
+    $editingPoint = array_merge($editingPoint, $oldPoint);
+}
+$newPoint = ($oldPoint !== [] && (int) ($oldPoint['qr_point_id'] ?? 0) === 0) ? $oldPoint : [];
+$renderAmount = static function (array $point): string {
+    if ((string) ($point['amount_type'] ?? 'open') === 'fixed' && (float) ($point['amount'] ?? 0) > 0) {
+        return formatPrice((float) $point['amount']);
+    }
+    return 'Open amount';
+};
+$renderStatus = static function (array $point): string {
+    return (int) ($point['is_active'] ?? 0) === 1
+        ? '<span class="badge bg-success">Active</span>'
+        : '<span class="badge bg-secondary">Inactive</span>';
+};
+
+// One field set, used by both the edit and the create card. Keeping the
+// markup in one place means the two forms cannot drift apart.
+$renderFields = static function (string $prefix, array $point) use ($branches, $paymentMethods): void {
+    $amountType = (string) ($point['amount_type'] ?? 'open');
+    $branchId = (int) ($point['branch_id'] ?? 0);
+    $methodId = (int) ($point['payment_method_id'] ?? 0);
+    $ecc = strtoupper((string) ($point['ecc'] ?? 'M'));
+    $isActive = array_key_exists('is_active', $point) ? !empty($point['is_active']) : true;
+    ?>
+    <div class="row mb-3">
+        <div class="col-12 col-md-7">
+            <label class="form-label" for="<?php echo e($prefix); ?>_name">Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="<?php echo e($prefix); ?>_name" name="name"
+                   value="<?php echo e($point['name'] ?? ''); ?>" maxlength="100" required>
+            <div class="form-text">What staff will see, for example “Main counter — Paystack”.</div>
+        </div>
+        <div class="col-12 col-md-5">
+            <label class="form-label" for="<?php echo e($prefix); ?>_code">Code <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="<?php echo e($prefix); ?>_code" name="code"
+                   value="<?php echo e($point['code'] ?? ''); ?>" pattern="[a-z][a-z0-9_-]{1,39}"
+                   maxlength="40" placeholder="main-counter" required>
+            <div class="invalid-feedback">Start with a lowercase letter; use lowercase letters, numbers, underscores or hyphens.</div>
+            <div class="form-text">Unique per company. It identifies the printed code in reports and support.</div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-12 col-md-6">
+            <label class="form-label" for="<?php echo e($prefix); ?>_branch">Branch</label>
+            <select class="form-select" id="<?php echo e($prefix); ?>_branch" name="branch_id">
+                <option value="0">All branches</option>
+                <?php foreach ($branches as $branch): ?>
+                <option value="<?php echo (int) $branch['branch_id']; ?>" <?php echo $branchId === (int) $branch['branch_id'] ? 'selected' : ''; ?>>
+                    <?php echo e($branch['name'] . (empty($branch['is_active']) ? ' (inactive)' : '')); ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-12 col-md-6">
+            <label class="form-label" for="<?php echo e($prefix); ?>_method">Payment method</label>
+            <select class="form-select" id="<?php echo e($prefix); ?>_method" name="payment_method_id">
+                <option value="0">Any tender</option>
+                <?php foreach ($paymentMethods as $method): ?>
+                <option value="<?php echo (int) $method['payment_method_id']; ?>" <?php echo $methodId === (int) $method['payment_method_id'] ? 'selected' : ''; ?>>
+                    <?php echo e($method['name'] . ' (' . $method['code'] . ')'); ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <div class="form-text">The tender the customer is expected to use. Leave as “Any tender” for a general code.</div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-12 col-md-7">
+            <label class="form-label" for="<?php echo e($prefix); ?>_merchant">Merchant reference</label>
+            <input type="text" class="form-control" id="<?php echo e($prefix); ?>_merchant" name="merchant_reference"
+                   value="<?php echo e($point['merchant_reference'] ?? ''); ?>" maxlength="120"
+                   placeholder="Store or account reference at the provider">
+            <div class="form-text">Optional. For a fixed amount it is also sent as the <code>reference</code> query parameter.</div>
+        </div>
+        <div class="col-12 col-md-5">
+            <label class="form-label" for="<?php echo e($prefix); ?>_ecc">QR error correction</label>
+            <select class="form-select" id="<?php echo e($prefix); ?>_ecc" name="ecc">
+                <?php foreach (['L' => 'L — smallest, least damage tolerance', 'M' => 'M — balanced (recommended)', 'Q' => 'Q — more damage tolerance', 'H' => 'H — most damage tolerance, largest code'] as $level => $label): ?>
+                <option value="<?php echo e($level); ?>" <?php echo $ecc === $level ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-12">
+            <label class="form-label" for="<?php echo e($prefix); ?>_url">Scan destination <span class="text-danger">*</span></label>
+            <input type="text" class="form-control font-monospace" id="<?php echo e($prefix); ?>_url" name="scan_url"
+                   value="<?php echo e($point['scan_url'] ?? ''); ?>" maxlength="500"
+                   placeholder="https://pay.example.com/checkout" required>
+            <div class="invalid-feedback">Enter the link the QR should open.</div>
+            <div class="form-text">Usually the payment link from your provider or bank. http(s) links are validated; other URI schemes such as <code>upi:</code> or <code>tel:</code> are accepted when well formed.</div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-12 col-md-5">
+            <label class="form-label" for="<?php echo e($prefix); ?>_amount_type">Amount</label>
+            <select class="form-select" id="<?php echo e($prefix); ?>_amount_type" name="amount_type" data-qr-amount-type>
+                <option value="open" <?php echo $amountType === 'open' ? 'selected' : ''; ?>>Open — customer enters the amount</option>
+                <option value="fixed" <?php echo $amountType === 'fixed' ? 'selected' : ''; ?>>Fixed — amount is embedded in the QR</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-3">
+            <label class="form-label" for="<?php echo e($prefix); ?>_amount">Fixed amount</label>
+            <input type="number" class="form-control" id="<?php echo e($prefix); ?>_amount" name="amount"
+                   value="<?php echo $amountType === 'fixed' && (float) ($point['amount'] ?? 0) > 0 ? e(number_format((float) $point['amount'], 2, '.', '')) : ''; ?>"
+                   min="0.01" step="0.01" data-qr-amount
+                   <?php echo $amountType === 'fixed' ? '' : 'disabled'; ?>>
+            <div class="form-text">Only used by a fixed-amount code.</div>
+        </div>
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="<?php echo e($prefix); ?>_sort">Sort order</label>
+            <input type="number" class="form-control" id="<?php echo e($prefix); ?>_sort" name="sort_order"
+                   value="<?php echo (int) ($point['sort_order'] ?? 0); ?>" min="0" max="9999">
+            <div class="form-text">Lower numbers appear first.</div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-12">
+            <label class="form-label" for="<?php echo e($prefix); ?>_description">Description</label>
+            <textarea class="form-control" id="<?php echo e($prefix); ?>_description" name="description" rows="2"
+                      maxlength="2000"><?php echo e($point['description'] ?? ''); ?></textarea>
+        </div>
+    </div>
+
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="<?php echo e($prefix); ?>_active" name="is_active" value="1"
+               <?php echo $isActive ? 'checked' : ''; ?>>
+        <label class="form-check-label" for="<?php echo e($prefix); ?>_active">Active — show this code as usable</label>
+    </div>
+    <?php
+};
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <div class="alert alert-secondary mt-4" role="note">
+                <div class="d-flex gap-3">
+                    <i class="fas fa-qrcode fa-2x mt-1" aria-hidden="true"></i>
+                    <div>
+                        <strong>How a scan-to-pay code works.</strong>
+                        The QR contains the <em>scan destination</em> stored below. For a fixed-amount point the app appends
+                        <code>amount</code> and <code>reference</code> query parameters to an http(s) link; for an open-amount point the
+                        link is used unchanged. This screen does not take the payment itself — the provider or bank behind the link does.
+                        The code is drawn from the record every time it is previewed or downloaded, so a reprint can never disagree with the list.
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-1 mb-4">
+                <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="card h-100"><div class="card-body">
+                        <div class="text-muted small">Pay points</div>
+                        <div class="h4 mb-0"><?php echo $totalPoints; ?></div>
+                        <div class="small text-muted">Company-wide</div>
+                    </div></div>
+                </div>
+                <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="card h-100"><div class="card-body">
+                        <div class="text-muted small">Active</div>
+                        <div class="h4 mb-0 text-success"><?php echo $activePoints; ?></div>
+                        <div class="small text-muted"><?php echo $totalPoints - $activePoints; ?> inactive</div>
+                    </div></div>
+                </div>
+                <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="card h-100"><div class="card-body">
+                        <div class="text-muted small">Fixed amount</div>
+                        <div class="h4 mb-0"><?php echo $fixedPoints; ?></div>
+                        <div class="small text-muted">Amount embedded in the QR</div>
+                    </div></div>
+                </div>
+                <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="card h-100"><div class="card-body">
+                        <div class="text-muted small">Open amount</div>
+                        <div class="h4 mb-0"><?php echo $openPoints; ?></div>
+                        <div class="small text-muted">Customer enters the amount</div>
+                    </div></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="card-title mb-0"><i class="fas fa-qrcode me-2"></i>Configured QR Pay Points</h5>
+                    <span class="small text-muted">A deactivated point stays listed so a printed copy can still be identified.</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-foundation align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>QR</th>
+                                    <th>Name</th>
+                                    <th>Code</th>
+                                    <th>Branch / tender</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if ($points === []): ?>
+                                <tr>
+                                    <td colspan="8" class="text-muted">No QR pay points configured yet. Create one below to give the counter a scannable code.</td>
+                                </tr>
+                                <?php endif; ?>
+                                <?php foreach ($points as $index => $pointRow): ?>
+                                <?php
+                                $thumb = qrPaymentPointSvg($pointRow, ['moduleWidth' => 2.0, 'margin' => 4]);
+                                $pointId = (int) $pointRow['qr_point_id'];
+                                $isActive = (int) $pointRow['is_active'] === 1;
+                                ?>
+                                <tr>
+                                    <td><?php echo $index + 1; ?></td>
+                                    <td class="text-center" style="width: 80px;">
+                                        <?php if (!empty($thumb['ok'])): ?>
+                                        <a href="<?php echo e(url('/qr_payments?action=preview&id=' . $pointId)); ?>" target="_blank" rel="noopener"
+                                           title="Open a full-size preview">
+                                            <span class="d-inline-block bg-white p-1 rounded"><?php echo $thumb['svg']; ?></span>
+                                        </a>
+                                        <?php else: ?>
+                                        <span class="badge bg-danger" title="<?php echo e($thumb['message']); ?>">No QR</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold"><?php echo e($pointRow['name']); ?></div>
+                                        <?php if (!empty($pointRow['description'])): ?>
+                                        <div class="small text-muted"><?php echo e($pointRow['description']); ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><code><?php echo e($pointRow['code']); ?></code></td>
+                                    <td class="small">
+                                        <div><?php echo e($pointRow['branch_name'] ?? 'All branches'); ?></div>
+                                        <div class="text-muted"><?php echo e($pointRow['payment_method_name'] ?? 'Any tender'); ?></div>
+                                    </td>
+                                    <td class="text-nowrap">
+                                        <?php echo e($renderAmount($pointRow)); ?>
+                                        <div class="small text-muted"><?php echo e((string) ($pointRow['amount_type'] ?? 'open') === 'fixed' ? 'Fixed' : 'Open'); ?></div>
+                                    </td>
+                                    <td><?php echo $renderStatus($pointRow); ?></td>
+                                    <td class="text-nowrap text-end">
+                                        <a class="btn btn-sm btn-outline-secondary" title="Preview"
+                                           href="<?php echo e(url('/qr_payments?action=preview&id=' . $pointId)); ?>" target="_blank" rel="noopener">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a class="btn btn-sm btn-outline-secondary" title="Download SVG"
+                                           href="<?php echo e(url('/qr_payments?action=download&id=' . $pointId)); ?>">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                        <?php if ($canUpdate): ?>
+                                        <a class="btn btn-sm btn-outline-secondary" title="Edit"
+                                           href="<?php echo e(url('/qr_payments?action=list&edit=' . $pointId)); ?>">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <form action="<?php echo e(url('/qr_payments?action=list')); ?>" method="POST" class="d-inline"
+                                              data-confirm="<?php echo $isActive ? 'Deactivate this QR pay point? The code stays in the list and can be reactivated.' : 'Reactivate this QR pay point?'; ?>">
+                                            <?php echo csrf_field(); ?>
+                                            <input type="hidden" name="action" value="toggle_qr_point">
+                                            <input type="hidden" name="qr_point_id" value="<?php echo $pointId; ?>">
+                                            <input type="hidden" name="target_active" value="<?php echo $isActive ? 0 : 1; ?>">
+                                            <button type="submit" class="btn btn-sm <?php echo $isActive ? 'btn-outline-danger' : 'btn-outline-success'; ?>"
+                                                    title="<?php echo $isActive ? 'Deactivate' : 'Activate'; ?>">
+                                                <i class="fas fa-<?php echo $isActive ? 'ban' : 'check'; ?>"></i>
+                                            </button>
+                                        </form>
+                                        <?php endif; ?>
+                                        <?php if ($canDelete): ?>
+                                        <form action="<?php echo e(url('/qr_payments?action=list')); ?>" method="POST" class="d-inline"
+                                              data-confirm="Delete this QR pay point permanently? Deactivate it instead if it has been printed or shared.">
+                                            <?php echo csrf_field(); ?>
+                                            <input type="hidden" name="action" value="delete_qr_point">
+                                            <input type="hidden" name="qr_point_id" value="<?php echo $pointId; ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <?php if ($editing && $canUpdate): ?>
+                <?php $preview = qrPaymentPointSvg($editingPoint, ['moduleWidth' => 8, 'margin' => 4]); ?>
+                <div class="col-12 col-xl-5">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-qrcode me-2"></i>Preview: <?php echo e($editingPoint['name']); ?></h5>
+                        </div>
+                        <div class="card-body text-center">
+                            <?php if (!empty($preview['ok'])): ?>
+                            <div class="d-inline-block bg-white p-3 rounded mb-3"><?php echo $preview['svg']; ?></div>
+                            <div class="small text-muted mb-2">Encoded destination</div>
+                            <div class="small font-monospace text-break mb-3"><?php echo e($preview['payload']); ?></div>
+                            <?php else: ?>
+                            <div class="alert alert-warning text-start"><?php echo e($preview['message']); ?></div>
+                            <?php endif; ?>
+                            <div class="d-flex flex-wrap justify-content-center gap-2">
+                                <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener"
+                                   href="<?php echo e(url('/qr_payments?action=preview&id=' . (int) $editingPoint['qr_point_id'])); ?>">
+                                    <i class="fas fa-up-right-from-square me-1"></i> Open full size
+                                </a>
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="<?php echo e(url('/qr_payments?action=download&id=' . (int) $editingPoint['qr_point_id'])); ?>">
+                                    <i class="fas fa-download me-1"></i> Download SVG
+                                </a>
+                            </div>
+                            <dl class="row small text-start mt-4 mb-0">
+                                <dt class="col-5">Status</dt><dd class="col-7"><?php echo $renderStatus($editingPoint); ?></dd>
+                                <dt class="col-5">Branch</dt><dd class="col-7"><?php echo e(!empty($editingPoint['branch_id']) ? ($editingPoint['branch_name'] ?? ('#' . (int) $editingPoint['branch_id'])) : 'All branches'); ?></dd>
+                                <dt class="col-5">Payment method</dt><dd class="col-7"><?php echo e(!empty($editingPoint['payment_method_id']) ? ($editingPoint['payment_method_name'] ?? ('#' . (int) $editingPoint['payment_method_id'])) : 'Any tender'); ?></dd>
+                                <dt class="col-5">Error correction</dt><dd class="col-7"><?php echo e((string) ($editingPoint['ecc'] ?? 'M')); ?></dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($editing && $canUpdate): ?>
+                <div class="col-12 <?php echo $editing && $canUpdate ? 'col-xl-7' : 'col-xl-6'; ?>">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-pen me-2"></i>Edit QR Pay Point</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="<?php echo e(url('/qr_payments?action=list')); ?>" method="POST" class="needs-validation" novalidate>
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_qr_point">
+                                <input type="hidden" name="qr_point_id" value="<?php echo (int) $editingPoint['qr_point_id']; ?>">
+                                <?php $renderFields('edit', $editingPoint); ?>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Save Changes</button>
+                                    <a class="btn btn-outline-secondary" href="<?php echo e(url('/qr_payments?action=list')); ?>">Cancel</a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($canCreate): ?>
+                <div class="col-12 <?php echo $editing && $canUpdate ? 'col-xl-12' : 'col-xl-6'; ?>">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-plus me-2"></i>Add QR Pay Point</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="<?php echo e(url('/qr_payments?action=list')); ?>" method="POST" class="needs-validation" novalidate>
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_qr_point">
+                                <input type="hidden" name="qr_point_id" value="0">
+                                <?php $renderFields('new', $newPoint); ?>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Create QR Pay Point</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <?php if (!$canCreate && !$canUpdate): ?>
+            <div class="alert alert-secondary">Your role can view QR pay points but not change them. Ask an administrator for the <code>qr_payments.create</code> or <code>qr_payments.update</code> permission.</div>
+            <?php endif; ?>
+
+<?php ob_start(); ?>
+<script>
+    (function () {
+        'use strict';
+
+        // Bootstrap-style validation for both forms.
+        Array.from(document.querySelectorAll('.needs-validation')).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            });
+        });
+
+        // A fixed amount is only meaningful for a fixed-amount code. Disabling
+        // the input while open keeps the browser from submitting a stale value.
+        function syncAmount(select) {
+            var form = select.closest('form');
+            if (!form) { return; }
+            var amount = form.querySelector('[data-qr-amount]');
+            if (!amount) { return; }
+            var fixed = select.value === 'fixed';
+            amount.disabled = !fixed;
+            amount.required = fixed;
+            if (!fixed) {
+                amount.value = '';
+            }
+        }
+        Array.from(document.querySelectorAll('[data-qr-amount-type]')).forEach(function (select) {
+            syncAmount(select);
+            select.addEventListener('change', function () { syncAmount(select); });
+        });
+    })();
+</script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

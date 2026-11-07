@@ -1,0 +1,88 @@
+== 1. settings that decide a slip ==
+PASS  with nothing stored, a slip is 80 mm, says keep it, and would show a logo
+PASS  the width the editor offers is exactly the width the layouts can render
+PASS  a stored 58 is honoured by the reader
+PASS  a width nobody can lay out is refused by the editor, not stored
+PASS  a width written straight into the table anyway still prints at a known size
+PASS  the footer is the company sentence, kept in step with the editor definition
+PASS  printing the logo can be turned off
+
+== 2. one payload, two paper widths ==
+PASS  the slip is built from the invoice, its lines and its payments
+PASS  the bill, the payment and the balance agree
+PASS  58 mm holds fewer characters in a line than 80 mm
+PASS  not one line is wider than the paper it was laid out for
+PASS  the long item name wraps into several lines instead of being cut or overflowed
+PASS  both papers carry the number
+PASS  both papers carry the total
+PASS  both papers carry the customer
+PASS  both papers carry the branch
+PASS  both papers carry the cashier
+PASS  both papers carry the footer
+PASS  the two papers agree on what was charged, line for line
+PASS  a sale nobody has paid yet shows its balance and no change at all
+
+== 3. what was handed over, and what the drawer saw ==
+PASS  a shift is open for the register to sell against
+PASS  the register sold and handed change back
+PASS  the row keeps the bill and the notes apart
+PASS  the slip states the change, and the change is the notes minus the bill
+PASS  the drawer grew by the bill, never by the notes handed over
+PASS  Expected moves by the bill and the float alone, so change is not a payout
+PASS  a split tender is two rows, each with its own money handed over
+PASS  the header still says split while the slip lists both tenders
+PASS  a transfer is never shown as change, only cash above the bill is
+PASS  notes above the bill leave change on the slip and in the audit trail
+PASS  a sale from before this column existed has its change inferred, not invented
+PASS  an online tender prints as received money with no change claimed
+
+== 4. the slip tells the truth about a sale ==
+PASS  names that need escaping in a PDF string survive to the slip
+PASS  the SKU a cashier scanned travels with the line
+PASS  a sale taken on a shift says which cashier opened it
+PASS  another company's invoice has no slip to print
+PASS  a sale id that never existed has no slip either
+PASS  the currency on the slip is the company's, not a default
+
+== 5. the PDF is a real file ==
+PASS  it opens as a PDF and ends as one
+PASS  every cross-reference offset points at the object it claims
+PASS  the page is the paper width it was asked for, in points
+PASS  a 58 mm PDF is a narrower page, not the same page relabelled
+PASS  every line the text layout produced is findable inside the file
+PASS  brackets and backslashes in a product name cannot break the file
+PASS  an accented shop name does not corrupt the PDF
+PASS  the fonts the page names are in the file, regular and bold
+PASS  a receipt longer than one strip is paginated, not clipped
+PASS  the file needs no PDF library that this host lacks
+
+== 6. a logo, prepared safely ==
+PASS  the logo store lives where the web server cannot read it
+PASS  an uploaded PNG becomes a stored JPEG and the setting points at it
+PASS  what is kept is the mark, flattened to gray and no wider than a slip needs
+PASS  the upload is audited against the company that owns it
+PASS  the slip carries the logo inline, decoding back to the stored bytes
+PASS  turning the logo off hides it without deleting anything
+PASS  a PHP file wearing a PNG name is refused and nothing is written
+PASS  a picture too small to read is refused
+PASS  a hand-edited setting cannot make a slip print a file from outside the logo store
+PASS  nor through a traversal out of it
+PASS  the PDF carries the logo as an image whose colour space matches the picture inside
+PASS  a slip with no logo has no image object to fetch
+PASS  removing it takes the file and the setting together
+
+== 7. reprinting is an act with a record ==
+PASS  a sale that has never been printed is not a reprint
+PASS  the first print is stored as PRINT, not coerced into UPDATE
+PASS  the record says format, paper, totals and change, not just that something happened
+PASS  after that print, the same slip is knowingly a reprint
+PASS  a reprint says so on the paper, in its own words
+PASS  the second print admits it was a reprint
+PASS  PDF and HTML prints are told apart in the trail
+
+== teardown evidence ==
+PASS  every print row in the trail is one this run pressed, against a sale it made
+PASS  nothing outside the names the sweep deletes was left in this company
+
+70 passed, 0 failed
+TEARDOWN  audit_log 97 (baseline 97), print rows 0, logo files company1=as found, company2=as found

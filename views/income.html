@@ -1,0 +1,303 @@
+<?php
+$pageHeading = 'Income';
+$pageEyebrow = 'Revenue recognition';
+$pageDescription = 'Income sources, recognition and payment tracking.';
+$activeNav = 'income';
+ob_start();
+?>
+<span class="badge bg-primary align-self-center">Total: <?php echo formatPrice($totalIncome); ?></span>
+<span class="badge bg-success align-self-center">Received: <?php echo formatPrice($totalReceived); ?></span>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'sources' ? 'active' : ''; ?>" href="<?php echo e(url('/income?action=sources')); ?>">Income Sources</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'transactions' ? 'active' : ''; ?>" href="<?php echo e(url('/income?action=transactions')); ?>">Transactions</a></li>
+            </ul>
+
+            <?php if ($action === 'sources'): ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold"><?php echo $source !== [] ? 'Edit source' : 'Add source'; ?></span>
+                            <?php if ($source !== []): ?><a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/income?action=sources')); ?>">New</a><?php endif; ?>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/income?action=sources')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_source">
+                                <input type="hidden" name="source_id" value="<?php echo (int) ($source['income_source_id'] ?? 0); ?>">
+                                <div class="mb-3">
+                                    <label class="form-label" for="source_name">Name <span class="text-danger">*</span></label>
+                                    <input class="form-control" id="source_name" name="source_name" required value="<?php echo e($source['name'] ?? ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="source_code">Code</label>
+                                    <input class="form-control" id="source_code" name="source_code" value="<?php echo e($source['code'] ?? ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="source_description">Description</label>
+                                    <textarea class="form-control" id="source_description" name="source_description" rows="2"><?php echo e($source['description'] ?? ''); ?></textarea>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="source_active" name="is_active" value="1" <?php echo (int) ($source['is_active'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="source_active">Active</label>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i><?php echo $source !== [] ? 'Update source' : 'Create source'; ?></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Income sources</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Name</th><th>Code</th><th class="text-end">Transactions</th><th class="text-end">Received</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+                                <tbody>
+                                    <?php if ($incomeSources === []): ?>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No income sources yet. Add one to start recording income.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($incomeSources as $row): ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo e($row['name']); ?></div>
+                                            <div class="small text-muted"><?php echo e($row['description'] ?? ''); ?></div>
+                                        </td>
+                                        <td><?php echo e($row['code'] ?? '—'); ?></td>
+                                        <td class="text-end"><?php echo (int) $row['transaction_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_received']); ?></td>
+                                        <td><span class="badge bg-<?php echo (int) $row['is_active'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $row['is_active'] === 1 ? 'Active' : 'Inactive'; ?></span></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/income?action=sources&source_id=' . (int) $row['income_source_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                            <?php if ((int) $row['is_active'] === 1): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/income?action=sources')); ?>" data-confirm="Deactivate this income source?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="deactivate_source">
+                                                <input type="hidden" name="source_id" value="<?php echo (int) $row['income_source_id']; ?>">
+                                                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="fas fa-power-off"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php else: ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold"><?php echo $transaction !== [] ? 'Edit transaction' : 'Record income'; ?></span>
+                            <?php if ($transaction !== []): ?><a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/income?action=transactions')); ?>">New</a><?php endif; ?>
+                        </div>
+                        <div class="card-body">
+                            <?php if ($incomeSources === []): ?>
+                            <div class="alert alert-warning">Create an income source first.</div>
+                            <?php endif; ?>
+                            <form method="POST" action="<?php echo e(url('/income?action=transactions')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_transaction">
+                                <input type="hidden" name="transaction_id" value="<?php echo (int) ($transaction['income_id'] ?? 0); ?>">
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="source_id">Income source <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="source_id" name="source_id" required>
+                                        <option value="">-- Select source --</option>
+                                        <?php foreach ($incomeSources as $row): ?>
+                                        <?php if ((int) $row['is_active'] === 1 || (int) ($transaction['source_id'] ?? 0) === (int) $row['income_source_id']): ?>
+                                        <option value="<?php echo (int) $row['income_source_id']; ?>" <?php echo (int) ($transaction['source_id'] ?? $defaultSourceId) === (int) $row['income_source_id'] ? 'selected' : ''; ?>><?php echo e($row['name']); ?></option>
+                                        <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="customer_id">Customer</label>
+                                        <select class="form-select" id="customer_id" name="customer_id">
+                                            <option value="">-- Walk-in --</option>
+                                            <?php foreach ($customers as $customerRow): ?>
+                                            <option value="<?php echo (int) $customerRow['customer_id']; ?>" <?php echo (int) ($transaction['customer_id'] ?? 0) === (int) $customerRow['customer_id'] ? 'selected' : ''; ?>><?php echo e($customerRow['name']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="branch_id">Branch</label>
+                                        <select class="form-select" id="branch_id" name="branch_id">
+                                            <option value="">-- None --</option>
+                                            <?php foreach ($branches as $branchRow): ?>
+                                            <option value="<?php echo (int) $branchRow['branch_id']; ?>" <?php echo (int) ($transaction['branch_id'] ?? 0) === (int) $branchRow['branch_id'] ? 'selected' : ''; ?>><?php echo e($branchRow['name']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="sales_invoice_id">Sales invoice</label>
+                                    <select class="form-select" id="sales_invoice_id" name="sales_invoice_id">
+                                        <option value="">-- None --</option>
+                                        <?php foreach ($invoices as $invoiceRow): ?>
+                                        <option value="<?php echo (int) $invoiceRow['invoice_id']; ?>" <?php echo (int) ($transaction['sales_invoice_id'] ?? 0) === (int) $invoiceRow['invoice_id'] ? 'selected' : ''; ?>><?php echo e($invoiceRow['invoice_number']); ?> &mdash; <?php echo formatPrice((float) $invoiceRow['total_amount']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="income_date">Date</label>
+                                        <input class="form-control" type="date" id="income_date" name="income_date" value="<?php echo e($transaction['income_date'] ?? date('Y-m-d')); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="transaction_number">Transaction number</label>
+                                        <input class="form-control" id="transaction_number" name="transaction_number" value="<?php echo e($transaction['transaction_number'] ?? ''); ?>" placeholder="Auto-generated">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="description">Description</label>
+                                    <textarea class="form-control" id="description" name="description" rows="2"><?php echo e($transaction['description'] ?? ''); ?></textarea>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6"><label class="form-label" for="gross_amount">Gross</label><input class="form-control income-calc" type="number" step="0.0001" min="0" id="gross_amount" name="gross_amount" value="<?php echo e($transaction['gross_amount'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="discount_amount">Discount</label><input class="form-control income-calc" type="number" step="0.0001" min="0" id="discount_amount" name="discount_amount" value="<?php echo e($transaction['discount_amount'] ?? '0.0000'); ?>"></div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6"><label class="form-label" for="tax_amount">Tax</label><input class="form-control income-calc" type="number" step="0.0001" min="0" id="tax_amount" name="tax_amount" value="<?php echo e($transaction['tax_amount'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="total_display">Total</label><input class="form-control" id="total_display" value="<?php echo e($transaction['total_amount'] ?? '0.0000'); ?>" readonly></div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="payment_status">Payment status</label>
+                                        <select class="form-select" id="payment_status" name="payment_status">
+                                            <?php foreach (['pending' => 'Pending', 'partial' => 'Partial', 'paid' => 'Paid', 'write_off' => 'Write off', 'cancelled' => 'Cancelled'] as $value => $label): ?>
+                                            <option value="<?php echo e($value); ?>" <?php echo ($transaction['payment_status'] ?? 'pending') === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="recognition_date">Recognition date</label>
+                                        <input class="form-control" type="date" id="recognition_date" name="recognition_date" value="<?php echo e($transaction['recognition_date'] ?? ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="recognized" name="recognized" value="1" <?php echo (int) ($transaction['recognized'] ?? 0) === 1 ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="recognized">Income recognized</label>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i><?php echo $transaction !== [] ? 'Update transaction' : 'Record income'; ?></button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm mt-4">
+                        <div class="card-header fw-semibold">Payment status summary</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Status</th><th class="text-end">Count</th><th class="text-end">Total</th></tr></thead>
+                                <tbody>
+                                    <?php if ($paymentSummary === []): ?>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">No income recorded.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($paymentSummary as $row): ?>
+                                    <tr>
+                                        <td><span class="badge bg-<?php echo ['paid' => 'success', 'partial' => 'warning', 'write_off' => 'danger', 'cancelled' => 'danger'][$row['payment_status']] ?? 'secondary'; ?>"><?php echo e($row['payment_status']); ?></span></td>
+                                        <td class="text-end"><?php echo (int) $row['count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Income transactions</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Transaction</th><th>Source</th><th>Customer</th><th>Date</th><th class="text-end">Total</th><th>Status</th><th>Recognized</th><th class="text-end">Actions</th></tr></thead>
+                                <tbody>
+                                    <?php if ($transactions === []): ?>
+                                    <tr><td colspan="8" class="text-center text-muted py-4">No income transactions yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($transactions as $row): ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo e($row['transaction_number']); ?></div>
+                                            <div class="small text-muted"><?php echo e($row['invoice_number'] ?? ''); ?></div>
+                                        </td>
+                                        <td><?php echo e($row['source_name'] ?? '—'); ?></td>
+                                        <td><?php echo e($row['customer_name'] ?? 'Walk-in'); ?></td>
+                                        <td><?php echo e($row['income_date']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td><span class="badge bg-<?php echo ['paid' => 'success', 'partial' => 'warning', 'write_off' => 'danger', 'cancelled' => 'danger'][$row['payment_status']] ?? 'secondary'; ?>"><?php echo e($row['payment_status']); ?></span></td>
+                                        <td><span class="badge bg-<?php echo (int) $row['recognized'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $row['recognized'] === 1 ? 'Yes' : 'No'; ?></span></td>
+                                        <td class="text-end text-nowrap">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/income?action=transactions&transaction_id=' . (int) $row['income_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                            <?php if ((int) $row['recognized'] !== 1): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/income?action=transactions')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="recognize_income">
+                                                <input type="hidden" name="transaction_id" value="<?php echo (int) $row['income_id']; ?>">
+                                                <button class="btn btn-sm btn-outline-success" type="submit" title="Recognize income"><i class="fas fa-star"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                            <?php if (!in_array($row['payment_status'], ['paid', 'cancelled'], true)): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/income?action=transactions')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="record_payment">
+                                                <input type="hidden" name="transaction_id" value="<?php echo (int) $row['income_id']; ?>">
+                                                <input type="hidden" name="payment_status" value="paid">
+                                                <button class="btn btn-sm btn-outline-success" type="submit" title="Mark paid"><i class="fas fa-money-bill-wave"></i></button>
+                                            </form>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/income?action=transactions')); ?>" data-confirm="Cancel this income transaction?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="cancel_transaction">
+                                                <input type="hidden" name="transaction_id" value="<?php echo (int) $row['income_id']; ?>">
+                                                <button class="btn btn-sm btn-outline-danger" type="submit" title="Cancel"><i class="fas fa-times"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+<?php ob_start(); ?>
+    <script>
+        (function () {
+            const gross = document.getElementById('gross_amount');
+            const discount = document.getElementById('discount_amount');
+            const tax = document.getElementById('tax_amount');
+            const total = document.getElementById('total_display');
+            if (!gross || !discount || !tax || !total) {
+                return;
+            }
+            function recalc() {
+                const base = parseFloat(gross.value) || 0;
+                const disc = parseFloat(discount.value) || 0;
+                const taxValue = parseFloat(tax.value) || 0;
+                total.value = (base - disc + taxValue).toFixed(4);
+            }
+            gross.addEventListener('input', recalc);
+            discount.addEventListener('input', recalc);
+            tax.addEventListener('input', recalc);
+            recalc();
+        })();
+    </script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

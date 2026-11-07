@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en" data-auth="home">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sign in to the inventory, sales, expense and financial management system.">
+    <title><?php echo e(APP_NAME); ?> - Sign In</title>
+    <link rel="stylesheet" href="<?php echo e(asset('css/foundation.css')); ?>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+          integrity="sha384-iw3OoTErCYJJB9mCa8LNS2hbsQ7M3C0EpIsO/H5+EGAkPGc6rk+V8i04oW/K5xq0" crossorigin="anonymous">
+    <style>
+        .home-page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #e9ecef;
+            background:
+                radial-gradient(1000px 620px at 88% -10%, rgba(13, 110, 253, 0.28), transparent 60%),
+                radial-gradient(820px 520px at -10% 110%, rgba(56, 161, 105, 0.16), transparent 62%),
+                linear-gradient(150deg, #141a24 0%, #1c2738 55%, #16202e 100%);
+        }
+        .home-nav {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(13, 20, 30, 0.35);
+            backdrop-filter: blur(8px);
+        }
+        .home-brand {
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            text-decoration: none;
+        }
+        .home-brand:hover { color: #fff; }
+        .home-brand i { color: #8cc8ff; }
+        .home-nav-note {
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 0.82rem;
+        }
+        .home-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            border: 1px solid rgba(99, 179, 237, 0.35);
+            background: rgba(13, 110, 253, 0.16);
+            color: #9ecbff;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .home-title {
+            color: #fff;
+            font-size: clamp(2rem, 4.2vw, 3.05rem);
+            font-weight: 800;
+            line-height: 1.08;
+            letter-spacing: -0.03em;
+        }
+        .home-lead {
+            max-width: 34rem;
+            color: rgba(255, 255, 255, 0.68);
+            font-size: 1.06rem;
+        }
+        .home-feature {
+            height: 100%;
+            padding: 1rem 1.05rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.045);
+        }
+        .home-feature-icon {
+            width: 2rem;
+            height: 2rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.55rem;
+            border-radius: 0.6rem;
+            background: rgba(99, 179, 237, 0.14);
+            color: #8cc8ff;
+            font-size: 0.9rem;
+        }
+        .home-feature h3 {
+            color: #fff;
+            font-size: 0.92rem;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+        .home-feature p {
+            margin-bottom: 0;
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+        .home-login-card {
+            border-radius: 1.1rem;
+            overflow: hidden;
+        }
+        .home-login-icon {
+            width: 2.75rem;
+            height: 2.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            border-radius: 0.8rem;
+            background: rgba(13, 110, 253, 0.1);
+            color: #0d6efd;
+            font-size: 1.2rem;
+        }
+        .home-footer {
+            margin-top: auto;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.45);
+            font-size: 0.8rem;
+        }
+        @media (max-width: 991.98px) {
+            .home-login-card { margin-top: 0.25rem; }
+        }
+    </style>
+</head>
+<body class="home-page">
+    <header class="home-nav py-3">
+        <div class="container d-flex align-items-center justify-content-between">
+            <a class="home-brand d-flex align-items-center" href="<?php echo e(url('/')); ?>">
+                <i class="fas fa-boxes-stacked me-2"></i><?php echo e(APP_NAME); ?>
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="home-nav-note d-none d-md-inline">
+                    <i class="fas fa-shield-halved me-1"></i>Secure company access
+                </span>
+                <a href="#signin" class="btn btn-light btn-sm fw-semibold">
+                    <i class="fas fa-arrow-right-to-bracket me-1"></i>Sign in
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container py-5">
+        <div class="row g-5 align-items-center">
+            <div class="col-lg-7">
+                <span class="home-eyebrow"><i class="fas fa-layer-group"></i>Business operations</span>
+                <h1 class="home-title mt-3 mb-3">Inventory, sales and finance under one roof.</h1>
+                <p class="home-lead mb-0">
+                    Track stock across branches, invoice customers, record expenses and see your
+                    position in real time &mdash; with approvals and a full audit trail built in.
+                </p>
+
+                <div class="row g-3 mt-4">
+                    <div class="col-sm-6">
+                        <div class="home-feature">
+                            <span class="home-feature-icon"><i class="fas fa-boxes-stacked"></i></span>
+                            <h3>Inventory control</h3>
+                            <p>On-hand by branch, receipts, issues, adjustments and low-stock alerts.</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="home-feature">
+                            <span class="home-feature-icon"><i class="fas fa-file-invoice-dollar"></i></span>
+                            <h3>Sales &amp; receivables</h3>
+                            <p>Invoices, customer payments and statements with stock-safe cancellation.</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="home-feature">
+                            <span class="home-feature-icon"><i class="fas fa-receipt"></i></span>
+                            <h3>Expenses &amp; income</h3>
+                            <p>Categorised records and supplier payments, kept separate from sales.</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="home-feature">
+                            <span class="home-feature-icon"><i class="fas fa-building-columns"></i></span>
+                            <h3>Banking &amp; ledger</h3>
+                            <p>Account transactions with running balances and double-entry postings.</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="home-feature">
+                            <span class="home-feature-icon"><i class="fas fa-stamp"></i></span>
+                            <h3>Approvals</h3>
+                            <p>Workflows for expenses, invoices and discounts, with a full action trail.</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="home-feature">
+                            <span class="home-feature-icon"><i class="fas fa-chart-line"></i></span>
+                            <h3>Reports &amp; audit</h3>
+                            <p>Trial balance, income statement, balance sheet, cash flow and audit log.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card home-login-card border-0 shadow-lg" id="signin">
+                    <div class="card-body p-4 p-lg-5">
+                        <span class="home-login-icon"><i class="fas fa-boxes-stacked"></i></span>
+                        <h2 class="h4 fw-bold mb-1">Welcome back</h2>
+                        <p class="text-muted small mb-4">Sign in to your workspace</p>
+
+                        <?php if (!empty($error)): ?>
+                            <div class="alert alert-danger" role="alert"><?php echo e($error); ?></div>
+                        <?php endif; ?>
+
+                        <?php if (!empty($message)): ?>
+                            <div class="alert alert-info" role="alert"><?php echo e($message); ?></div>
+                        <?php endif; ?>
+
+                        <form action="<?php echo e(url('/login')); ?>" method="POST" class="needs-validation" novalidate>
+                            <?php echo csrf_field(); ?>
+
+                            <div class="mb-3">
+                                <label for="username" class="form-label">Username or email</label>
+                                <input type="text" class="form-control" id="username" name="username"
+                                       value="<?php echo e($login ?? ''); ?>" autocomplete="username" required autofocus>
+                                <div class="invalid-feedback">Please enter your username or email.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="password" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="password" name="password"
+                                       autocomplete="current-password" required>
+                                <div class="invalid-feedback">Please enter your password.</div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-sign-in-alt me-2"></i>Sign In
+                            </button>
+                        </form>
+
+                        <hr class="my-4">
+                        <p class="text-muted small mb-0">
+                            Password resets and new accounts are handled by your administrator.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="home-footer py-3">
+        <div class="container d-flex flex-wrap justify-content-between gap-2">
+            <span>&copy; <?php echo e(date('Y')); ?> <?php echo e(APP_NAME); ?></span>
+            <span>Version <?php echo e(APP_VERSION); ?> &middot; Internal business system</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <script>
+        (function () {
+            'use strict';
+            document.querySelectorAll('.needs-validation').forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

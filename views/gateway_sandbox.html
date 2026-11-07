@@ -1,0 +1,127 @@
+<?php
+/**
+ * Stand-in for a provider's hosted checkout page (views/gateway_sandbox.html).
+ *
+ * It is reached only for a payment session whose mode is "sandbox", and the
+ * buttons below do nothing except record the operator's verdict on that row.
+ * The money never moves, no card data exists here, and gatewayVerify() is the
+ * only thing that can turn the verdict into a sale.
+ */
+$sandboxMoney = static fn (float $value): string => number_format($value, 2);
+$sandboxStatus = (string) ($sandboxSession['status'] ?? 'pending');
+$sandboxPaidBefore = in_array($sandboxStatus, ['paid', 'refunded', 'partial_refund'], true);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulated checkout - <?php echo e($sandboxProvider); ?></title>
+    <style>
+        body { margin: 0; padding: 24px 16px; background: #eef1f5; color: #1c2430;
+               font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+        .wrap { max-width: 560px; margin: 0 auto; }
+        .bar { background: #20272f; color: #fff; border-radius: 10px 10px 0 0; padding: 14px 18px;
+               display: flex; justify-content: space-between; align-items: center; }
+        .bar span { opacity: .75; font-size: 13px; }
+        .card { background: #fff; border-radius: 0 0 10px 10px; padding: 20px 18px;
+                box-shadow: 0 6px 20px rgba(20, 30, 45, .10); }
+        .due { font-size: 30px; font-weight: 700; letter-spacing: -.5px; }
+        .due small { font-size: 14px; font-weight: 500; color: #5b6774; }
+        .notice { background: #fff7e0; border: 1px solid #f0d08a; border-radius: 8px;
+                  padding: 10px 12px; font-size: 13px; margin: 0 0 18px; }
+        table { width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 14px; }
+        th { text-align: left; font-weight: 600; color: #5b6774; border-bottom: 1px solid #e2e7ee; padding: 6px 0; }
+        td { border-bottom: 1px solid #eef1f5; padding: 7px 0; }
+        td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .row { display: flex; gap: 10px; flex-wrap: wrap; }
+        button { flex: 1 1 150px; border: 0; border-radius: 8px; padding: 12px 14px; font-size: 15px;
+                 font-weight: 600; cursor: pointer; }
+        .pay { background: #1a7f4b; color: #fff; }
+        .decline { background: #e5eaf0; color: #2a3440; }
+        .wait { background: #e5eaf0; color: #2a3440; }
+        button[disabled] { opacity: .5; cursor: not-allowed; }
+        dl { margin: 16px 0 0; font-size: 13px; color: #5b6774; display: grid;
+             grid-template-columns: auto 1fr; gap: 2px 10px; }
+        dt { font-weight: 600; }
+        dd { margin: 0; font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+        .back { display: inline-block; margin-top: 16px; font-size: 13px; color: #33415a; }
+        .done { background: #e7f6ee; border: 1px solid #9fd8b6; border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="bar">
+        <strong><?php echo e($sandboxProvider); ?> checkout</strong>
+        <span>Simulator</span>
+    </div>
+    <div class="card">
+        <p class="notice">
+            This page is <strong>not</strong> the real <?php echo e($sandboxProvider); ?> site. It is this
+            application standing in for the provider while no live keys are configured, so the till can be
+            built and tested end to end. Nothing is charged and no card details exist. On a host marked as
+            production, or once sandbox is switched off, these buttons stop recording anything at all.
+        </p>
+
+        <div class="due"><?php echo e($sandboxMoney($sandboxAmount)); ?> <small><?php echo e($sandboxCurrency); ?> due</small></div>
+        <p style="font-size:13px;color:#5b6774;margin:4px 0 18px;">
+            Quoted by the server from the cashier's cart. It cannot be edited on this page.
+        </p>
+
+        <?php if (($sandboxCart['lines'] ?? []) !== []): ?>
+        <table>
+            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
+            <tbody>
+            <?php foreach ($sandboxCart['lines'] as $line): ?>
+                <tr>
+                    <td><?php echo e($line['name']); ?></td>
+                    <td class="num"><?php echo e(number_format($line['quantity'], 2, '.', '')); ?></td>
+                    <td class="num"><?php echo e($sandboxMoney((float) $line['line_total'])); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php else: ?>
+        <p style="font-size:13px;color:#5b6774;">
+            The cashier's cart is no longer open in this browser, which does not affect the payment: the sale is
+            rebuilt from the snapshot saved with the session, not from what is on screen.
+        </p>
+        <?php endif; ?>
+
+        <?php if ($sandboxSimulatable && !$sandboxPaidBefore): ?>
+        <form method="post" action="<?php echo e(url('/sales.php?action=gateway_sandbox')); ?>">
+            <?php echo csrf_field(); ?>
+            <input type="hidden" name="reference" value="<?php echo e((string) $sandboxSession['reference']); ?>">
+            <div class="row">
+                <button type="submit" class="pay" name="outcome" value="approve">Pay now</button>
+                <button type="submit" class="decline" name="outcome" value="decline">Decline</button>
+                <button type="submit" class="wait" name="outcome" value="timeout">Leave it</button>
+            </div>
+        </form>
+        <?php elseif ($sandboxPaidBefore): ?>
+        <div class="done">
+            This session has already been answered (status: <?php echo e($sandboxStatus); ?>).
+            A session is only ever paid once.
+        </div>
+        <?php else: ?>
+        <div class="notice">
+            Simulation is not permitted on this host, so these buttons are gone. The gateway configuration page
+            controls whether simulated payments may be recorded at all.
+        </div>
+        <?php endif; ?>
+
+        <dl>
+            <dt>Reference</dt><dd><?php echo e((string) $sandboxSession['reference']); ?></dd>
+            <dt>Status</dt><dd><?php echo e($sandboxStatus); ?></dd>
+            <dt>Opened</dt><dd><?php echo e((string) ($sandboxSession['created_at'] ?? '')); ?></dd>
+        </dl>
+
+        <a class="back" href="<?php echo e(url('/sales?action=pos')); ?>">&larr; Back to the till</a>
+        <p style="font-size:12px;color:#8494a8;margin-top:14px;">
+            "Pay now" does not complete a sale. It records what the provider would have said; the sale is written
+            when this application verifies that answer against its own session.
+        </p>
+    </div>
+</div>
+</body>
+</html>

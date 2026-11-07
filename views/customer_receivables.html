@@ -1,0 +1,555 @@
+<?php
+$pageHeading = 'Receivables';
+$pageEyebrow = 'Customer balances';
+$pageDescription = 'Balances, aging, statements and credit control for <strong>' . e($customer['name'] ?? 'all customers') . '</strong>.';
+$activeNav = 'receivables';
+ob_start();
+?>
+<a class="btn btn-sm btn-primary" href="<?php echo e(url('/sales?action=customers')); ?>">
+    <i class="fas fa-user-plus me-2"></i>Manage Customers
+</a>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($customer !== []): ?>
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-4">
+                            <h5 class="mb-1"><?php echo e($customer['name']); ?></h5>
+                            <p class="mb-1 text-muted"><?php echo e($customer['email'] ?? 'No email'); ?> &middot; <?php echo e($customer['phone'] ?? 'No phone'); ?></p>
+                            <span class="badge bg-<?php echo ($customer['payment_status'] ?? 'current') === 'overdue' ? 'danger' : (($customer['payment_status'] ?? 'current') === 'open' ? 'info' : 'success'); ?>">
+                                <?php echo e(ucfirst($customer['payment_status'] ?? 'current')); ?>
+                            </span>
+                            <?php if ((int) ($customer['is_active'] ?? 1) !== 1): ?>
+                            <span class="badge bg-secondary">Inactive</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="text-muted small">Credit Limit</div>
+                            <div class="fw-semibold"><?php echo formatPrice((float) ($customer['credit_limit'] ?? 0)); ?></div>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="text-muted small">Outstanding</div>
+                            <div class="fw-semibold"><?php echo formatPrice((float) ($customer['outstanding'] ?? 0)); ?></div>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="text-muted small">Overdue</div>
+                            <div class="fw-semibold text-danger"><?php echo formatPrice((float) ($customer['overdue_amount'] ?? 0)); ?></div>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="text-muted small">Payment Terms</div>
+                            <div class="fw-semibold"><?php echo e($customer['payment_terms'] ?? 'Net 30'); ?></div>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex flex-wrap gap-2">
+                        <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/customer_receivables?action=statements&customer_id=' . $customerId)); ?>">Statements</a>
+                        <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/customer_receivables?action=communications&customer_id=' . $customerId)); ?>">Communication History</a>
+                        <a class="btn btn-sm btn-outline-success" href="<?php echo e(url('/sales?action=sales')); ?>">Record Sale</a>
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($customerInvoices !== [] || $customerPayments !== []): ?>
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-lg-7">
+                    <div class="card h-100">
+                        <div class="card-header"><i class="fas fa-file-invoice me-2"></i>Recent Invoices</div>
+                        <div class="card-body table-responsive p-0">
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Invoice</th><th>Issued</th><th class="text-end">Total</th><th class="text-end">Balance</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    <?php foreach (array_slice($customerInvoices, 0, 5) as $inv): ?>
+                                    <tr>
+                                        <td><?php echo e($inv['invoice_number']); ?></td>
+                                        <td><?php echo e(date('M d, Y', strtotime($inv['issue_date']))); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $inv['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $inv['amount_owed']); ?></td>
+                                        <td><span class="badge bg-secondary"><?php echo e($inv['status']); ?></span></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-5">
+                    <div class="card h-100">
+                        <div class="card-header"><i class="fas fa-money-check-alt me-2"></i>Recent Payments</div>
+                        <div class="card-body table-responsive p-0">
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Date</th><th>Invoice</th><th class="text-end">Amount</th></tr></thead>
+                                <tbody>
+                                    <?php if ($customerPayments === []): ?>
+                                    <tr><td colspan="3" class="text-muted text-center py-3">No payments recorded.</td></tr>
+                                    <?php else: ?>
+                                    <?php foreach (array_slice($customerPayments, 0, 5) as $payment): ?>
+                                    <tr>
+                                        <td><?php echo e(date('M d, Y', strtotime($payment['payment_date']))); ?></td>
+                                        <td><?php echo e($payment['invoice_number'] ?? '—'); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $payment['amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+            <?php endif; ?>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <a class="nav-link <?php echo $action === 'aging' ? 'active' : ''; ?>" href="<?php echo e(url('/customer_receivables?action=aging')); ?>">Aging Report</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo $action === 'statements' ? 'active' : ''; ?>" href="<?php echo e(url('/customer_receivables?action=statements')); ?>">Statements</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo $action === 'communications' ? 'active' : ''; ?>" href="<?php echo e(url('/customer_receivables?action=communications')); ?>">Communications</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo $action === 'customers' ? 'active' : ''; ?>" href="<?php echo e(url('/customer_receivables?action=customers')); ?>">Credit Control</a>
+                </li>
+            </ul>
+
+            <?php if ($action === 'aging'): ?>
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-lg-3">
+                    <div class="card text-white bg-primary h-100">
+                        <div class="card-body">
+                            <h6 class="card-title text-uppercase small mb-2">Total Receivables</h6>
+                            <p class="card-text fs-4 mb-0"><?php echo formatPrice($totalOutstanding); ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="card text-white bg-danger h-100">
+                        <div class="card-body">
+                            <h6 class="card-title text-uppercase small mb-2">Total Overdue</h6>
+                            <p class="card-text fs-4 mb-0"><?php echo formatPrice($totalOverdue); ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="card text-white bg-warning h-100">
+                        <div class="card-body">
+                            <h6 class="card-title text-uppercase small mb-2">Customers Overdue</h6>
+                            <p class="card-text fs-4 mb-0"><?php echo count($overdueCustomers); ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="card text-white bg-success h-100">
+                        <div class="card-body">
+                            <h6 class="card-title text-uppercase small mb-2">Active Customers</h6>
+                            <p class="card-text fs-4 mb-0"><?php echo (int) $activeCustomerCount; ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-lg">
+                    <div class="card h-100"><div class="card-body py-3">
+                        <div class="text-muted small text-uppercase">Current</div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['current']); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="card h-100"><div class="card-body py-3">
+                        <div class="text-muted small text-uppercase">1-30 Days</div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_1_30']); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="card h-100"><div class="card-body py-3">
+                        <div class="text-muted small text-uppercase">31-60 Days</div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_31_60']); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="card h-100"><div class="card-body py-3">
+                        <div class="text-muted small text-uppercase">61-90 Days</div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_61_90']); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-lg">
+                    <div class="card h-100"><div class="card-body py-3">
+                        <div class="text-muted small text-uppercase">90+ Days</div>
+                        <div class="fw-semibold text-danger"><?php echo formatPrice((float) $agingBuckets['days_over_90']); ?></div>
+                    </div></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-exclamation-triangle me-2"></i>Overdue Customers</span>
+                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/customer_receivables?action=aging')); ?>">Refresh</a>
+                </div>
+                <div class="card-body table-responsive p-0">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th class="text-end">Outstanding</th>
+                                <th class="text-end">Overdue</th>
+                                <th>Oldest Due</th>
+                                <th>Aging</th>
+                                <th class="text-end">Credit Limit</th>
+                                <th class="text-end">Available</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($overdueCustomers === []): ?>
+                            <tr><td colspan="8" class="text-center text-muted py-4">No customers are overdue.</td></tr>
+                            <?php else: ?>
+                            <?php foreach ($overdueCustomers as $row): ?>
+                            <?php
+                                $days = customerDaysOverdue($row);
+                                $available = (float) $row['credit_limit'] - (float) $row['outstanding'];
+                            ?>
+                            <tr>
+                                <td>
+                                    <a href="<?php echo e(url('/customer_receivables?action=statements&customer_id=' . (int) $row['customer_id'])); ?>">
+                                        <?php echo e($row['name']); ?>
+                                    </a>
+                                    <?php if ((int) $row['is_active'] !== 1): ?><span class="badge bg-secondary ms-1">Inactive</span><?php endif; ?>
+                                </td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['outstanding']); ?></td>
+                                <td class="text-end text-danger"><?php echo formatPrice((float) $row['overdue_amount']); ?></td>
+                                <td><?php echo e($row['oldest_due_date'] ? date('M d, Y', strtotime($row['oldest_due_date'])) : '—'); ?></td>
+                                <td><span class="badge bg-<?php echo $days > 90 ? 'danger' : ($days > 60 ? 'warning text-dark' : 'info text-dark'); ?>"><?php echo e(getAgingCategory((float) $days)); ?></span></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['credit_limit']); ?></td>
+                                <td class="text-end <?php echo $available < 0 ? 'text-danger' : ''; ?>"><?php echo formatPrice($available); ?></td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/customer_receivables?action=statements&customer_id=' . (int) $row['customer_id'])); ?>" title="Statement">
+                                        <i class="fas fa-file-alt"></i>
+                                    </a>
+                                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/customer_receivables?action=communications&customer_id=' . (int) $row['customer_id'])); ?>" title="Communication">
+                                        <i class="fas fa-comments"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <?php elseif ($action === 'statements'): ?>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <form class="row g-2 align-items-end" method="GET" action="<?php echo e(url('/customer_receivables')); ?>">
+                        <input type="hidden" name="action" value="statements">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label" for="statement_customer">Customer</label>
+                            <select class="form-select" id="statement_customer" name="customer_id" onchange="this.form.submit()">
+                                <option value="0">Select a customer…</option>
+                                <?php foreach ($customers as $row): ?>
+                                <option value="<?php echo (int) $row['customer_id']; ?>" <?php echo $customerId === (int) $row['customer_id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($row['name']); ?><?php echo (int) $row['is_active'] === 1 ? '' : ' (inactive)'; ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <?php if ($customer === []): ?>
+            <div class="alert alert-secondary">Select a customer to generate and review account statements.</div>
+            <?php else: ?>
+            <div class="card mb-3">
+                <div class="card-header"><i class="fas fa-plus-circle me-2"></i>Generate Statement — <?php echo e($customer['name']); ?></div>
+                <div class="card-body">
+                    <form method="POST" action="<?php echo e(url('/customer_receivables?action=statements')); ?>" class="row g-3 align-items-end">
+                        <?php echo csrf_field(); ?>
+                        <input type="hidden" name="action" value="create_statement">
+                        <input type="hidden" name="customer_id" value="<?php echo (int) $customerId; ?>">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label" for="period_start">Period Start</label>
+                            <input type="date" class="form-control" id="period_start" name="period_start" value="<?php echo e(date('Y-m-01', strtotime('first day of previous month'))); ?>" required>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label" for="period_end">Period End</label>
+                            <input type="date" class="form-control" id="period_end" name="period_end" value="<?php echo e(date('Y-m-t', strtotime('last day of previous month'))); ?>" required>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save me-2"></i>Generate Statement</button>
+                        </div>
+                    </form>
+                    <p class="text-muted small mb-0 mt-2">Opening balance is calculated from invoices and payments before the period; ending balance equals opening plus period sales minus period payments.</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><i class="fas fa-file-invoice-dollar me-2"></i>Statements</div>
+                <div class="card-body table-responsive p-0">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Statement Date</th>
+                                <th>Period</th>
+                                <th class="text-end">Opening</th>
+                                <th class="text-end">Sales</th>
+                                <th class="text-end">Payments</th>
+                                <th class="text-end">Ending</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($statements === []): ?>
+                            <tr><td colspan="8" class="text-center text-muted py-4">No statements generated for this customer.</td></tr>
+                            <?php else: ?>
+                            <?php foreach ($statements as $statement): ?>
+                            <tr>
+                                <td><?php echo e(date('M d, Y', strtotime($statement['statement_date']))); ?></td>
+                                <td><?php echo e(date('M d, Y', strtotime($statement['period_start']))); ?> – <?php echo e(date('M d, Y', strtotime($statement['period_end']))); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $statement['opening_balance']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $statement['sales_amount']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $statement['payments_received']); ?></td>
+                                <td class="text-end fw-semibold"><?php echo formatPrice((float) $statement['ending_balance']); ?></td>
+                                <td><span class="badge bg-<?php echo $statement['status'] === 'sent' ? 'success' : 'secondary'; ?>"><?php echo e(ucfirst($statement['status'])); ?></span></td>
+                                <td class="text-end">
+                                    <?php if ($statement['status'] !== 'sent'): ?>
+                                    <form method="POST" action="<?php echo e(url('/customer_receivables?action=statements')); ?>" class="d-inline">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="mark_statement_sent">
+                                        <input type="hidden" name="statement_id" value="<?php echo (int) $statement['statement_id']; ?>">
+                                        <input type="hidden" name="customer_id" value="<?php echo (int) $customerId; ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">Mark Sent</button>
+                                    </form>
+                                    <?php else: ?>
+                                    <span class="text-muted small">Sent</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php elseif ($action === 'communications'): ?>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <form class="row g-2 align-items-end" method="GET" action="<?php echo e(url('/customer_receivables')); ?>">
+                        <input type="hidden" name="action" value="communications">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label" for="communication_customer">Customer</label>
+                            <select class="form-select" id="communication_customer" name="customer_id" onchange="this.form.submit()">
+                                <option value="0">Select a customer…</option>
+                                <?php foreach ($customers as $row): ?>
+                                <option value="<?php echo (int) $row['customer_id']; ?>" <?php echo $customerId === (int) $row['customer_id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($row['name']); ?><?php echo (int) $row['is_active'] === 1 ? '' : ' (inactive)'; ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <?php if ($customer === []): ?>
+            <div class="alert alert-secondary">Select a customer to record and review communications.</div>
+            <?php else: ?>
+            <div class="row g-3">
+                <div class="col-12 col-lg-5">
+                    <div class="card h-100">
+                        <div class="card-header"><i class="fas fa-paper-plane me-2"></i>Record Communication</div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/customer_receivables?action=communications')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="record_communication">
+                                <input type="hidden" name="customer_id" value="<?php echo (int) $customerId; ?>">
+                                <div class="mb-3">
+                                    <label class="form-label" for="communication_type">Type</label>
+                                    <select class="form-select" id="communication_type" name="communication_type">
+                                        <option value="email">Email</option>
+                                        <option value="phone">Phone</option>
+                                        <option value="letter">Letter</option>
+                                        <option value="sms">SMS</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="subject">Subject</label>
+                                    <input type="text" class="form-control" id="subject" name="subject" maxlength="200" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="body">Details</label>
+                                    <textarea class="form-control" id="body" name="body" rows="5" placeholder="What was discussed or sent?"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Communication</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-7">
+                    <div class="card h-100">
+                        <div class="card-header"><i class="fas fa-history me-2"></i>History — <?php echo e($customer['name']); ?></div>
+                        <div class="card-body table-responsive p-0">
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Date</th><th>Type</th><th>Subject</th><th>By</th></tr></thead>
+                                <tbody>
+                                    <?php if ($communications === []): ?>
+                                    <tr><td colspan="4" class="text-center text-muted py-4">No communications recorded yet.</td></tr>
+                                    <?php else: ?>
+                                    <?php foreach ($communications as $comm): ?>
+                                    <tr>
+                                        <td><?php echo e(date('M d, Y H:i', strtotime($comm['sent_date']))); ?></td>
+                                        <td><span class="badge bg-info text-dark"><?php echo e(ucfirst($comm['communication_type'])); ?></span></td>
+                                        <td>
+                                            <div><?php echo e($comm['subject'] ?? '—'); ?></div>
+                                            <?php if (!empty($comm['body'])): ?><div class="text-muted small"><?php echo e(mb_strimwidth($comm['body'], 0, 110, '…')); ?></div><?php endif; ?>
+                                        </td>
+                                        <td><?php echo e($comm['created_by_name'] ?? 'System'); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php elseif ($action === 'customers'): ?>
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-id-card me-2"></i>Customer Credit Control</span>
+                    <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/sales?action=customers')); ?>">Add Customer</a>
+                </div>
+                <div class="card-body table-responsive p-0">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Contact</th>
+                                <th>Terms</th>
+                                <th class="text-end">Credit Limit</th>
+                                <th class="text-end">Outstanding</th>
+                                <th class="text-end">Available</th>
+                                <th class="text-end">Overdue</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($customers === []): ?>
+                            <tr><td colspan="9" class="text-center text-muted py-4">No customers have been created yet.</td></tr>
+                            <?php else: ?>
+                            <?php foreach ($customers as $row): ?>
+                            <?php $available = (float) $row['credit_limit'] - (float) $row['outstanding']; ?>
+                            <tr>
+                                <td>
+                                    <?php echo e($row['name']); ?>
+                                    <?php if ((int) $row['is_active'] !== 1): ?><span class="badge bg-secondary ms-1">Inactive</span><?php endif; ?>
+                                </td>
+                                <td class="small text-muted">
+                                    <?php echo e($row['email'] ?: '—'); ?><br><?php echo e($row['phone'] ?: ''); ?>
+                                </td>
+                                <td><?php echo e($row['payment_terms']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['credit_limit']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['outstanding']); ?></td>
+                                <td class="text-end <?php echo $available < 0 ? 'text-danger' : ''; ?>"><?php echo formatPrice($available); ?></td>
+                                <td class="text-end <?php echo (float) $row['overdue_amount'] > 0 ? 'text-danger' : ''; ?>"><?php echo formatPrice((float) $row['overdue_amount']); ?></td>
+                                <td>
+                                    <span class="badge bg-<?php echo ($row['payment_status'] ?? 'current') === 'overdue' ? 'danger' : (($row['payment_status'] ?? 'current') === 'open' ? 'info text-dark' : 'success'); ?>">
+                                        <?php echo e(ucfirst($row['payment_status'] ?? 'current')); ?>
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-primary js-credit-modal"
+                                            data-bs-toggle="modal" data-bs-target="#creditModal"
+                                            data-customer-id="<?php echo (int) $row['customer_id']; ?>"
+                                            data-customer-name="<?php echo e($row['name']); ?>"
+                                            data-credit-limit="<?php echo e((string) $row['credit_limit']); ?>"
+                                            data-payment-terms="<?php echo e($row['payment_terms']); ?>">
+                                        Edit Terms
+                                    </button>
+                                    <?php if ((int) $row['is_active'] === 1): ?>
+                                    <form method="POST" action="<?php echo e(url('/customer_receivables?action=customers')); ?>" class="d-inline" data-confirm="Deactivate this customer? Historical records are preserved.">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="deactivate_customer">
+                                        <input type="hidden" name="customer_id" value="<?php echo (int) $row['customer_id']; ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Deactivate</button>
+                                    </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal fade" id="creditModal" tabindex="-1" aria-labelledby="creditModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form method="POST" action="<?php echo e(url('/customer_receivables?action=customers')); ?>" id="creditForm">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="action" value="update_credit">
+                            <input type="hidden" name="customer_id" id="credit_customer_id" value="">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="creditModalLabel">Edit Credit Terms</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted">Customer: <strong id="credit_customer_name"></strong></p>
+                                <div class="mb-3">
+                                    <label class="form-label" for="credit_limit">Credit Limit</label>
+                                    <input type="number" step="0.0001" min="0" class="form-control" id="credit_limit" name="credit_limit" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_terms">Payment Terms</label>
+                                    <select class="form-select" id="payment_terms" name="payment_terms">
+                                        <?php foreach ($creditTerms as $term): ?>
+                                        <option value="<?php echo e($term); ?>"><?php echo e($term); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Terms</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+<?php ob_start(); ?>
+    <script>
+    (function () {
+        var modal = document.getElementById('creditModal');
+        if (modal) {
+            modal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                if (!button) { return; }
+                document.getElementById('credit_customer_id').value = button.getAttribute('data-customer-id') || '';
+                document.getElementById('credit_customer_name').textContent = button.getAttribute('data-customer-name') || '';
+                document.getElementById('credit_limit').value = button.getAttribute('data-credit-limit') || '0';
+                document.getElementById('payment_terms').value = button.getAttribute('data-payment-terms') || 'Net 30';
+            });
+        }
+    })();
+    </script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

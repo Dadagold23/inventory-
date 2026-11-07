@@ -1,0 +1,201 @@
+<?php
+$pageHeading = 'Payments Made';
+$pageEyebrow = 'Supplier settlements';
+$pageDescription = 'Supplier payments, purchase order links and outstanding payables.';
+$activeNav = 'payment_made';
+ob_start();
+?>
+<span class="badge bg-primary align-self-center">Payments: <?php echo (int) $totals['payment_count']; ?></span>
+<span class="badge bg-success align-self-center">Paid: <?php echo formatPrice($totals['total_amount']); ?></span>
+<span class="badge bg-warning align-self-center">Outstanding: <?php echo formatPrice($totalOutstanding); ?></span>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Record payment made</div>
+                        <div class="card-body">
+                            <?php if ($suppliers === []): ?>
+                            <div class="alert alert-warning">Add a supplier before recording payments.</div>
+                            <?php endif; ?>
+                            <form method="POST" action="<?php echo e(url('/payment_made?action=list')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="record_payment">
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="vendor_id">Supplier <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="vendor_id" name="vendor_id" required>
+                                        <option value="">-- Select supplier --</option>
+                                        <?php foreach ($suppliers as $supplier): ?>
+                                        <option value="<?php echo (int) $supplier['vendor_id']; ?>"><?php echo e($supplier['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="purchase_order_id">Purchase order</label>
+                                    <select class="form-select" id="purchase_order_id" name="purchase_order_id">
+                                        <option value="">-- None --</option>
+                                        <?php foreach ($purchaseOrders as $po): ?>
+                                        <option value="<?php echo (int) $po['purchase_order_id']; ?>" data-vendor="<?php echo (int) $po['vendor_id']; ?>"><?php echo e($po['po_number']); ?> &mdash; <?php echo e($po['supplier_name'] ?? ''); ?> (<?php echo formatPrice((float) $po['amount_owed']); ?> due)</option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="invoice_receipt_id">Invoice / receipt</label>
+                                    <select class="form-select" id="invoice_receipt_id" name="invoice_receipt_id">
+                                        <option value="">-- None --</option>
+                                        <?php foreach ($openInvoices as $ir): ?>
+                                        <option value="<?php echo (int) $ir['invoice_receipt_id']; ?>" data-vendor="<?php echo (int) $ir['vendor_id']; ?>"><?php echo e($ir['invoice_number'] ?: ('IR #' . $ir['invoice_receipt_id'])); ?> &mdash; <?php echo e($ir['supplier_name'] ?? ''); ?> (<?php echo formatPrice((float) $ir['amount_due']); ?> due)</option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="amount">Amount <span class="text-danger">*</span></label>
+                                        <input class="form-control" type="number" step="0.0001" min="0.0001" id="amount" name="amount" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="payment_date">Payment date</label>
+                                        <input class="form-control" type="date" id="payment_date" name="payment_date" value="<?php echo e(date('Y-m-d')); ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_method">Payment method</label>
+                                    <select class="form-select" id="payment_method" name="payment_method">
+                                        <?php foreach (['cash' => 'Cash', 'check' => 'Check', 'bank_transfer' => 'Bank transfer', 'credit_card' => 'Credit card', 'debit_card' => 'Debit card'] as $value => $label): ?>
+                                        <option value="<?php echo e($value); ?>"><?php echo e($label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="reference_number">Reference number</label>
+                                    <input class="form-control" id="reference_number" name="reference_number">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="notes">Notes</label>
+                                    <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i>Record payment</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Payments made</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Date</th><th>Supplier</th><th>PO / Invoice</th><th class="text-end">Amount</th><th>Method</th><th>Reference</th><th>Recorded by</th></tr></thead>
+                                <tbody>
+                                    <?php if ($payments === []): ?>
+                                    <tr><td colspan="7" class="text-center text-muted py-4">No payments recorded yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($payments as $row): ?>
+                                    <tr>
+                                        <td><?php echo e($row['payment_date']); ?></td>
+                                        <td><?php echo e($row['supplier_name'] ?? '—'); ?></td>
+                                        <td>
+                                            <div><?php echo e($row['po_number'] ?? '—'); ?></div>
+                                            <?php if (!empty($row['invoice_number'])): ?><div class="small text-muted"><?php echo e($row['invoice_number']); ?></div><?php endif; ?>
+                                        </td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount']); ?></td>
+                                        <td><span class="badge bg-secondary"><?php echo e(str_replace('_', ' ', $row['payment_method'])); ?></span></td>
+                                        <td><?php echo e($row['reference_number'] ?? '—'); ?></td>
+                                        <td><?php echo e($row['created_by_name'] ?? '—'); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-1">
+                <div class="col-12 col-lg-7">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Outstanding payables</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Supplier</th><th class="text-end">Invoiced</th><th class="text-end">Paid</th><th class="text-end">Outstanding</th></tr></thead>
+                                <tbody>
+                                    <?php if ($outstanding === []): ?>
+                                    <tr><td colspan="4" class="text-center text-muted py-3">No outstanding payables.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($outstanding as $row): ?>
+                                    <tr>
+                                        <td><?php echo e($row['supplier_name']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['invoice_total']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['paid_amount']); ?></td>
+                                        <td class="text-end fw-semibold"><?php echo formatPrice((float) $row['outstanding_amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-5">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Payments by method</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Method</th><th class="text-end">Count</th><th class="text-end">Total</th></tr></thead>
+                                <tbody>
+                                    <?php if ($paymentSummary === []): ?>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">No payments.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($paymentSummary as $row): ?>
+                                    <tr>
+                                        <td><?php echo e(str_replace('_', ' ', $row['payment_method'])); ?></td>
+                                        <td class="text-end"><?php echo (int) $row['transaction_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+<?php ob_start(); ?>
+    <script>
+        (function () {
+            const vendor = document.getElementById('vendor_id');
+            const selects = [document.getElementById('purchase_order_id'), document.getElementById('invoice_receipt_id')];
+            if (!vendor) {
+                return;
+            }
+            function filterOptions() {
+                const vendorId = vendor.value;
+                selects.forEach(function (select) {
+                    if (!select) {
+                        return;
+                    }
+                    Array.from(select.options).forEach(function (option) {
+                        if (!option.value) {
+                            return;
+                        }
+                        option.hidden = vendorId !== '' && option.dataset.vendor !== vendorId;
+                    });
+                    const selected = select.options[select.selectedIndex];
+                    if (selected && selected.hidden) {
+                        select.value = '';
+                    }
+                });
+            }
+            vendor.addEventListener('change', filterOptions);
+            filterOptions();
+        })();
+    </script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

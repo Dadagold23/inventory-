@@ -1,0 +1,25 @@
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /inventory/
+
+    # Serve existing files and directories directly.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Extensionless URLs: /dashboard -> dashboard.php, /auth -> auth.php
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^(.+?)/?$ $1.php [L,QSA]
+</IfModule>
+
+# Never serve environment, source dumps, or internal documentation.
+<FilesMatch "(^\.env.*|^\.git.*|\.(sql|md|log|bak|ini|lock|sh|bat)$|^prompt\.txt$|^composer\.(json|lock)$)">
+    Require all denied
+</FilesMatch>
+
+# Legacy setup, migration, and ad-hoc test scripts must not be reachable over HTTP.
+<FilesMatch "^(apply_schema|check_schema|create_payment_received|fix_module13|run_migration|test_db|test_module[0-9]+)\.php$">
+    Require all denied
+</FilesMatch>

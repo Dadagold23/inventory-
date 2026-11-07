@@ -1,0 +1,170 @@
+<?php
+/**
+ * Printable shift report (standalone: no app chrome).
+ * X report = snapshot of a shift still open; Z report = the closed, counted
+ * version. Expects: $reportShift, $reportTotals, $reportMovements,
+ * $reportSales, $reportCompany
+ */
+$kind = $reportShift['status'] === 'open' ? 'X' : 'Z';
+$companyName = (string) ($reportCompany['name'] ?? '');
+$currency = (string) ($reportCompany['currency'] ?? '');
+$variance = $reportTotals['variance'];
+$money = static fn (float $v): string => number_format($v, 2) . ($currency !== '' ? ' ' . $currency : '');
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><?php echo $kind; ?> report #<?php echo (int) $reportShift['shift_id']; ?> · <?php echo e($companyName ?: 'Inventory'); ?></title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: #eef1f5; color: #000;
+            font-family: "Segoe UI", Arial, sans-serif; font-size: 13px;
+        }
+        .toolbar {
+            display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+            padding: .8rem 1rem; background: #1f2a37; color: #fff;
+        }
+        .toolbar a, .toolbar button {
+            background: #fff; color: #1f2a37; border: 0; border-radius: 6px;
+            padding: .45rem .8rem; font-size: .85rem; text-decoration: none; cursor: pointer;
+        }
+        .paper {
+            max-width: 76mm; margin: 1rem auto; background: #fff; padding: 6mm 5mm;
+            box-shadow: 0 1px 4px rgba(0,0,0,.18);
+        }
+        h1 { font-size: 15px; margin: 0 0 2px; }
+        .sub { font-size: 11px; color: #444; margin-bottom: 8px; }
+        h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 4px; color: #333; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        td, th { padding: 2px 0; text-align: left; vertical-align: top; }
+        th { font-weight: 600; }
+        .num { text-align: right; white-space: nowrap; }
+        .total td, .total th { border-top: 1px solid #000; font-weight: 700; padding-top: 4px; }
+        .rule { border: 0; border-top: 1px dashed #999; margin: 10px 0; }
+        .flag { font-weight: 700; }
+        .ok { color: #0a7d3c; }
+        .bad { color: #b3261e; }
+        .sign { border: 1px solid #999; padding: 6px 8px; margin-top: 12px; font-size: 11px; }
+        .sign div { margin-bottom: 18px; }
+        @media print {
+            body { background: #fff; }
+            .toolbar { display: none; }
+            .paper { box-shadow: none; margin: 0; max-width: none; padding: 0; }
+            @page { size: 80mm auto; margin: 4mm; }
+        }
+    </style>
+</head>
+<body>
+<div class="toolbar">
+    <strong><?php echo $kind; ?> report — shift #<?php echo (int) $reportShift['shift_id']; ?></strong>
+    <span style="font-size:.8rem;opacity:.85">
+        <?php echo e($reportShift['branch_name'] ?? ''); ?> ·
+        <?php echo e(date('d M Y H:i', strtotime((string) $reportShift['opened_at']))); ?>
+        <?php echo $reportShift['closed_at'] ? ' → ' . e(date('d M Y H:i', strtotime((string) $reportShift['closed_at']))) : ''; ?>
+    </span>
+    <button type="button" onclick="window.print()">Print</button>
+    <a href="<?php echo e(url('/shifts?action=detail&shift_id=' . (int) $reportShift['shift_id'])); ?>">Back</a>
+</div>
+
+<div class="paper">
+    <h1><?php echo e($companyName !== '' ? $companyName : 'Company'); ?></h1>
+    <div class="sub"><?php echo $kind; ?> report · <?php echo $reportShift['status'] === 'open' ? 'interim snapshot (shift still open)' : 'final, shift closed'; ?></div>
+    <div class="sub">
+        Cashier: <?php echo e($reportShift['cashier_name'] ?: ($reportShift['cashier_username'] ?? '')); ?> ·
+        Branch/Store: <?php echo e($reportShift['branch_name'] ?? ''); ?> ·
+        Opened: <?php echo e(date('d M Y H:i', strtotime((string) $reportShift['opened_at']))); ?>
+    </div>
+
+    <h2>Cash reconciliation</h2>
+    <table>
+        <tr><th>Opening float</th><td class="num"><?php echo e($money($reportTotals['opening_float'])); ?></td></tr>
+        <?php if (abs($reportTotals['float_adjustments']) > 0.0001): ?>
+        <tr><th>Float adjustments</th><td class="num"><?php echo e($money($reportTotals['float_adjustments'])); ?></td></tr>
+        <?php endif; ?>
+        <tr><th>Cash receipts</th><td class="num">+<?php echo e($money($reportTotals['cash_receipts'])); ?></td></tr>
+        <tr><th>Paid in</th><td class="num">+<?php echo e($money($reportTotals['paid_in'])); ?></td></tr>
+        <tr><th>Cash refunds</th><td class="num">-<?php echo e($money($reportTotals['cash_refunds'])); ?></td></tr>
+        <tr><th>Paid out</th><td class="num">-<?php echo e($money($reportTotals['paid_out'])); ?></td></tr>
+        <tr class="total"><th>Expected in drawer</th><td class="num"><?php echo e($money($reportTotals['expected_cash'])); ?></td></tr>
+        <tr>
+            <th>Counted at close</th>
+            <td class="num"><?php echo $reportTotals['closing_count'] === null ? 'not counted' : e($money((float) $reportTotals['closing_count'])); ?></td>
+        </tr>
+        <tr>
+            <th>Variance</th>
+            <td class="num flag <?php echo $variance === null ? '' : (abs((float) $variance) < 0.01 ? 'ok' : 'bad'); ?>">
+                <?php echo $variance === null ? '—' : e($money((float) $variance)); ?>
+            </td>
+        </tr>
+    </table>
+
+    <h2>Takings by payment method</h2>
+    <table>
+        <?php foreach ($reportTotals['by_method'] as $row): ?>
+        <tr>
+            <th><?php echo e(str_replace('_', ' ', (string) $row['payment_method'])); ?><?php echo in_array($row['payment_method'], $reportTotals['cash_codes'], true) ? ' (cash)' : ''; ?></th>
+            <td class="num"><?php echo e($money((float) $row['total'])); ?></td>
+            <td class="num"><?php echo (int) $row['entries']; ?>×</td>
+        </tr>
+        <?php endforeach; ?>
+        <?php if ($reportTotals['by_method'] === []): ?>
+        <tr><td colspan="3">No payments on this shift.</td></tr>
+        <?php endif; ?>
+        <tr class="total"><th>Total receipts</th><td class="num"><?php echo e($money($reportTotals['total_receipts'])); ?></td><td></td></tr>
+    </table>
+
+    <h2>Sales</h2>
+    <table>
+        <tr><th>Invoice</th><th class="num">Total</th><th class="num">Paid</th><th class="num">Owed</th></tr>
+        <?php foreach ($reportSales as $sale): ?>
+        <tr>
+            <td><?php echo e($sale['invoice_number']); ?><?php echo $sale['status'] === 'cancelled' ? ' (cancelled)' : ''; ?></td>
+            <td class="num"><?php echo e($money((float) $sale['total_amount'])); ?></td>
+            <td class="num"><?php echo e($money((float) $sale['amount_paid'])); ?></td>
+            <td class="num"><?php echo e($money((float) $sale['amount_owed'])); ?></td>
+        </tr>
+        <?php endforeach; ?>
+        <?php if ($reportSales === []): ?>
+        <tr><td colspan="4">No sales on this shift.</td></tr>
+        <?php endif; ?>
+        <tr class="total"><th><?php echo (int) $reportTotals['sales_count']; ?> sale(s)</th><td class="num"><?php echo e($money($reportTotals['sales_value'])); ?></td><td></td><td></td></tr>
+    </table>
+
+    <?php if ($reportMovements !== []): ?>
+    <h2>Drawer movements</h2>
+    <table>
+        <?php foreach ($reportMovements as $movement): ?>
+        <tr>
+            <td><?php echo e(date('H:i', strtotime((string) $movement['created_at']))); ?> <?php echo e(str_replace('_', ' ', (string) $movement['movement_type'])); ?></td>
+            <td class="num"><?php echo e($money((float) $movement['amount'])); ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table>
+    <?php endif; ?>
+
+    <hr class="rule">
+    <div class="sub">
+        Sales value <?php echo e($money($reportTotals['sales_value'])); ?> · collected <?php echo e($money($reportTotals['collected'])); ?> ·
+        outstanding <?php echo e($money($reportTotals['outstanding'])); ?>.
+        Change returned to customers is not listed as a payout: cash receipts are booked at the amount applied to each sale.
+    </div>
+    <?php if (!empty($reportShift['opening_note']) || !empty($reportShift['closing_note'])): ?>
+    <div class="sub">
+        <?php if (!empty($reportShift['opening_note'])): ?>Open note: <?php echo e($reportShift['opening_note']); ?><br><?php endif; ?>
+        <?php if (!empty($reportShift['closing_note'])): ?>Close note: <?php echo e($reportShift['closing_note']); ?><?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <?php if ($reportShift['force_closed']): ?>
+    <div class="sub bad">Force-closed by a manager without a counted drawer.</div>
+    <?php endif; ?>
+
+    <div class="sign">
+        <div>Cashier signature: ______________________</div>
+        <div>Verified by: ______________________</div>
+    </div>
+</div>
+</body>
+</html>

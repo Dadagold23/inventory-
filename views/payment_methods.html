@@ -1,0 +1,274 @@
+<?php
+$pageHeading = 'Payment Methods';
+$pageEyebrow = 'Administration';
+$pageDescription = 'Configure the payment methods available when recording sales and payments. Deactivate a method to hide it from new transactions; historical records always keep their original code.';
+$activeNav = 'payment_methods';
+require APP_ROOT . '/views/layout/header.php';
+
+$canUpdate = can('payment_methods', 'update');
+$editing = !empty($paymentMethod['payment_method_id']);
+$gatewayOptions = [];
+foreach (gatewayProviders() as $gatewayKey => $gatewayProvider) {
+    $gatewayOptions[$gatewayKey] = $gatewayProvider['label'];
+}
+$selectedGateway = (string) ($paymentMethod['gateway'] ?? '');
+// One field, used by both forms: the tender's provider is a single decision,
+// not two markup copies that can drift apart.
+$renderGatewayField = static function (string $prefix, string $selected) use ($gatewayOptions): void {
+    ?>
+    <div class="col-12 col-md-6">
+        <label class="form-label" for="<?php echo e($prefix); ?>_payment_method_gateway">Payment gateway</label>
+        <select class="form-select" id="<?php echo e($prefix); ?>_payment_method_gateway"
+                name="payment_method_gateway">
+            <option value="">— none —</option>
+            <?php foreach ($gatewayOptions as $value => $label): ?>
+            <option value="<?php echo e($value); ?>" <?php echo $selected === $value ? 'selected' : ''; ?>>
+                <?php echo e($label); ?>
+            </option>
+            <?php endforeach; ?>
+        </select>
+        <div class="form-text">The provider that actually takes the money. Only meaningful for an online method,
+            and the gateway must be configured and enabled before this tender can be used at the register.</div>
+    </div>
+    <?php
+};
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <!-- Payment Methods Table -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-credit-card me-2"></i>Configured Payment Methods</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-foundation mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Code</th>
+                                            <th>Name</th>
+                                            <th>Description</th>
+                                            <th>Attributes</th>
+                                            <th>Sort</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if ($paymentMethods === []): ?>
+                                        <tr>
+                                            <td colspan="7" class="text-muted">No payment methods configured yet.</td>
+                                        </tr>
+                                        <?php endif; ?>
+                                        <?php foreach ($paymentMethods as $i => $methodRow): ?>
+                                        <tr>
+                                            <td><?php echo $i + 1; ?></td>
+                                            <td><code><?php echo e($methodRow['code']); ?></code></td>
+                                            <td><?php echo e($methodRow['name']); ?></td>
+                                            <td class="small text-muted"><?php echo e($methodRow['description'] ?? ''); ?></td>
+                                            <td>
+                                                <?php if ((int) $methodRow['is_cash'] === 1): ?>
+                                                <span class="badge bg-success">Cash</span>
+                                                <?php endif; ?>
+                                                <?php if ((int) $methodRow['is_online'] === 1): ?>
+                                                <span class="badge bg-info">Online</span>
+                                                <?php endif; ?>
+                                                <?php if (!empty($methodRow['gateway'])): ?>
+                                                <span class="badge bg-dark"><?php echo e(gatewayProviderLabel((string) $methodRow['gateway'])); ?></span>
+                                                <?php endif; ?>
+                                                <?php if ((int) $methodRow['is_active'] === 1): ?>
+                                                <span class="badge bg-primary">Active</span>
+                                                <?php else: ?>
+                                                <span class="badge bg-danger">Inactive</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?php echo (int) $methodRow['sort_order']; ?></td>
+                                            <td class="text-nowrap">
+                                                <?php if ($canUpdate): ?>
+                                                <a class="btn btn-sm btn-outline-secondary" title="Edit"
+                                                   href="<?php echo e(url('/payment_methods?action=list&edit=' . (int) $methodRow['payment_method_id'])); ?>">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <form action="<?php echo e(url('/payment_methods?action=list')); ?>" method="POST" class="d-inline"
+                                                      data-confirm="<?php echo (int) $methodRow['is_active'] === 1 ? 'Deactivate this payment method? Historical records are preserved.' : 'Reactivate this payment method?'; ?>">
+                                                    <?php echo csrf_field(); ?>
+                                                    <input type="hidden" name="action" value="toggle_payment_method">
+                                                    <input type="hidden" name="payment_method_id" value="<?php echo (int) $methodRow['payment_method_id']; ?>">
+                                                    <input type="hidden" name="target_active" value="<?php echo (int) $methodRow['is_active'] === 1 ? 0 : 1; ?>">
+                                                    <button type="submit" class="btn btn-sm <?php echo (int) $methodRow['is_active'] === 1 ? 'btn-outline-danger' : 'btn-outline-success'; ?>"
+                                                            title="<?php echo (int) $methodRow['is_active'] === 1 ? 'Deactivate' : 'Activate'; ?>">
+                                                        <i class="fas fa-<?php echo (int) $methodRow['is_active'] === 1 ? 'ban' : 'check'; ?>"></i>
+                                                    </button>
+                                                </form>
+                                                <?php else: ?>
+                                                <span class="text-muted small">View only</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($canUpdate): ?>
+            <!-- Edit Form (shown via ?edit=ID) -->
+            <?php if ($editing): ?>
+            <div class="row mt-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-pen me-2"></i>Edit Payment Method: <?php echo e($paymentMethod['name']); ?></h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="<?php echo e(url('/payment_methods?action=list')); ?>" method="POST" class="needs-validation" novalidate>
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_payment_method">
+                                <input type="hidden" name="payment_method_id" value="<?php echo (int) $paymentMethod['payment_method_id']; ?>">
+                                <div class="row mb-3">
+                                    <div class="col-6">
+                                        <label for="edit_payment_method_code" class="form-label">Code <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="edit_payment_method_code" name="payment_method_code"
+                                               value="<?php echo e($paymentMethod['code']); ?>" pattern="[a-z][a-z0-9_]{1,49}" required>
+                                        <div class="form-text">Lowercase letters, numbers and underscores. Used by records; change only if you know what you are doing.</div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="edit_payment_method_sort_order" class="form-label">Sort Order</label>
+                                        <input type="number" class="form-control" id="edit_payment_method_sort_order" name="payment_method_sort_order"
+                                               value="<?php echo (int) $paymentMethod['sort_order']; ?>" min="0" max="9999">
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label for="edit_payment_method_name" class="form-label">Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="edit_payment_method_name" name="payment_method_name"
+                                               value="<?php echo e($paymentMethod['name']); ?>" maxlength="80" required>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label for="edit_payment_method_description" class="form-label">Description</label>
+                                        <textarea class="form-control" id="edit_payment_method_description" name="payment_method_description" rows="2"><?php echo e($paymentMethod['description'] ?? ''); ?></textarea>
+                                    </div>
+                                </div>
+                                <div class="d-flex flex-wrap gap-4 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="edit_payment_method_is_cash" name="payment_method_is_cash" value="1"
+                                               <?php echo (int) $paymentMethod['is_cash'] === 1 ? 'checked' : ''; ?>>
+                                        <label class="form-check-label" for="edit_payment_method_is_cash">Cash</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="edit_payment_method_is_online" name="payment_method_is_online" value="1"
+                                               <?php echo (int) $paymentMethod['is_online'] === 1 ? 'checked' : ''; ?>>
+                                        <label class="form-check-label" for="edit_payment_method_is_online">Online</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="edit_payment_method_is_active" name="payment_method_is_active" value="1"
+                                               <?php echo (int) $paymentMethod['is_active'] === 1 ? 'checked' : ''; ?>>
+                                        <label class="form-check-label" for="edit_payment_method_is_active">Active</label>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <?php $renderGatewayField('edit', $selectedGateway); ?>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Save Changes</button>
+                                    <a class="btn btn-outline-secondary" href="<?php echo e(url('/payment_methods?action=list')); ?>">Cancel</a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- Create Form -->
+            <div class="row mt-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0"><i class="fas fa-plus me-2"></i>Add Payment Method</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="<?php echo e(url('/payment_methods?action=list')); ?>" method="POST" class="needs-validation" novalidate>
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_payment_method">
+                                <input type="hidden" name="payment_method_id" value="0">
+                                <div class="row mb-3">
+                                    <div class="col-6">
+                                        <label for="new_payment_method_code" class="form-label">Code <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="new_payment_method_code" name="payment_method_code"
+                                               pattern="[a-z][a-z0-9_]{1,49}" placeholder="e.g. mobile_money" required>
+                                        <div class="invalid-feedback">Lowercase letter first, then letters, numbers or underscores.</div>
+                                        <div class="form-text">Unique per company. Used by payment records.</div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="new_payment_method_sort_order" class="form-label">Sort Order</label>
+                                        <input type="number" class="form-control" id="new_payment_method_sort_order" name="payment_method_sort_order" value="0" min="0" max="9999">
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label for="new_payment_method_name" class="form-label">Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="new_payment_method_name" name="payment_method_name" maxlength="80" required>
+                                        <div class="invalid-feedback">Please enter a name.</div>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label for="new_payment_method_description" class="form-label">Description</label>
+                                        <textarea class="form-control" id="new_payment_method_description" name="payment_method_description" rows="2"></textarea>
+                                    </div>
+                                </div>
+                                <div class="d-flex flex-wrap gap-4 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="new_payment_method_is_cash" name="payment_method_is_cash" value="1">
+                                        <label class="form-check-label" for="new_payment_method_is_cash">Cash</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="new_payment_method_is_online" name="payment_method_is_online" value="1">
+                                        <label class="form-check-label" for="new_payment_method_is_online">Online</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="new_payment_method_is_active" name="payment_method_is_active" value="1" checked>
+                                        <label class="form-check-label" for="new_payment_method_is_active">Active</label>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <?php $renderGatewayField('new', ''); ?>
+                                </div>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Save Payment Method</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+<?php ob_start(); ?>
+<script>
+    (function () {
+        'use strict';
+        const forms = document.querySelectorAll('.needs-validation');
+        Array.from(forms).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            });
+        });
+    })();
+</script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

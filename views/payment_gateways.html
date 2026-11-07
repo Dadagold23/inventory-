@@ -1,0 +1,555 @@
+<?php
+/**
+ * Payment gateway view: provider configuration (write-only credentials),
+ * the payment register, a single payment's detail, refunds, reconciliation
+ * and the webhook log.
+ *
+ * Expected variables from payment_gateways.php: $pdo, $companyId, $configs,
+ * $providers, $transactions, $summary, $reconciliation, $events, $onlineMethods,
+ * $sandboxWarning, $simulationPermitted, $filters, $transaction, $refunds,
+ * $transactionId.
+ */
+$pageHeading = 'Payment Gateways';
+$pageEyebrow = 'Paystack and Flutterwave configuration, payments and reconciliation';
+$pageDescription = 'Keys are stored encrypted and are never shown again. A payment becomes a sale only after this server has verified it with the provider — a redirect or a callback alone proves nothing.';
+$activeNav = 'gateways';
+
+$statusStyles = [
+    'pending' => 'secondary', 'paid' => 'success', 'failed' => 'danger',
+    'expired' => 'dark', 'refunded' => 'warning text-dark', 'partial_refund' => 'warning text-dark',
+];
+$statusNames = [
+    'pending' => 'Awaiting payment', 'paid' => 'Paid', 'failed' => 'Failed',
+    'expired' => 'Expired', 'refunded' => 'Refunded', 'partial_refund' => 'Partly refunded',
+];
+$money = static function ($amount, string $currency = ''): string {
+    return number_format((float) $amount, 2) . ($currency !== '' ? ' ' . $currency : '');
+};
+$gatewayFilter = (string) ($_GET['gateway'] ?? '');
+
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($sandboxWarning !== ''): ?>
+            <div class="alert alert-danger mt-3" role="alert">
+                <i class="bi bi-exclamation-octagon-fill me-2"></i><?php echo e($sandboxWarning); ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($transaction): ?>
+            <!-- ================= One payment session ================= -->
+            <?php
+            $tGateway = (string) $transaction['gateway'];
+            $canRefund = can('gateways', 'refund') && in_array((string) $transaction['status'], ['paid', 'partial_refund'], true);
+            $refundedSoFar = gatewayRefundedTotal($pdo, (int) $transaction['transaction_id']);
+            ?>
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header fw-semibold d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="bi bi-receipt-cutoff me-1"></i>Payment <?php echo e($transaction['reference']); ?></span>
+                    <span class="d-flex gap-2 align-items-center">
+                        <span class="badge bg-<?php echo e($statusStyles[(string) $transaction['status']] ?? 'secondary'); ?>">
+                            <?php echo e($statusNames[(string) $transaction['status']] ?? $transaction['status']); ?>
+                        </span>
+                        <span class="badge bg-light text-dark"><?php echo e(gatewayProviderLabel($tGateway)); ?> · <?php echo e($transaction['mode']); ?></span>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6 col-lg-3">
+                            <div class="text-muted small">Amount held for this session</div>
+                            <div class="fs-5 fw-semibold"><?php echo e($money($transaction['amount'], (string) $transaction['currency'])); ?></div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="text-muted small">Refunded</div>
+                            <div class="fs-5 fw-semibold"><?php echo e($money($refundedSoFar, (string) $transaction['currency'])); ?></div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="text-muted small">Sale</div>
+                            <div class="fs-5 fw-semibold">
+                                <?php if ((int) $transaction['invoice_id'] > 0): ?>
+                                <a href="<?php echo e(url('/sales?action=receipt&sale_id=' . (int) $transaction['invoice_id'])); ?>">
+                                    <?php echo e($linkedSaleNumber ?? ('#' . (int) $transaction['invoice_id'])); ?>
+                                </a>
+                                <?php else: ?>
+                                <span class="text-danger">not posted</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="text-muted small">Channel</div>
+                            <div class="fs-5 fw-semibold"><?php echo e($transaction['channel'] !== '' ? $transaction['channel'] : '—'); ?></div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive mt-3">
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                            <tr><th class="text-muted">Created</th><td><?php echo e((string) $transaction['created_at']); ?></td>
+                                <th class="text-muted">Verified</th><td><?php echo e((string) ($transaction['verified_at'] ?? '—')); ?></td></tr>
+                            <tr><th class="text-muted">Finalised</th><td><?php echo e((string) ($transaction['finalised_at'] ?? '—')); ?></td>
+                                <th class="text-muted">Provider reference</th><td><code><?php echo e((string) ($transaction['gateway_reference'] ?? '—')); ?></code></td></tr>
+                            <tr><th class="text-muted">Customer email</th><td><?php echo e((string) ($transaction['customer_email'] ?? '—')); ?></td>
+                                <th class="text-muted">Simulated</th><td><?php echo (int) $transaction['simulates_payment'] === 1 ? 'Yes — no real money moved' : 'No'; ?></td></tr>
+                            <?php if (trim((string) ($transaction['failure_reason'] ?? '')) !== ''): ?>
+                            <tr><th class="text-muted">Why it is held</th><td colspan="3" class="text-warning"><?php echo e((string) $transaction['failure_reason']); ?></td></tr>
+                            <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <?php if (can('gateways', 'verify')): ?>
+                    <form class="d-inline mt-3" method="POST" action="<?php echo e(url('/payment_gateways')); ?>">
+                        <?php echo csrf_field(); ?>
+                        <input type="hidden" name="action" value="verify">
+                        <input type="hidden" name="transaction_id" value="<?php echo (int) $transaction['transaction_id']; ?>">
+                        <button class="btn btn-sm btn-outline-primary" type="submit">
+                            <i class="bi bi-arrow-repeat me-1"></i>Ask the provider again
+                        </button>
+                        <span class="text-muted small ms-2">Verification is the only thing that can post this sale.</span>
+                    </form>
+                    <?php endif; ?>
+
+                    <?php if ($refunds !== []): ?>
+                    <div class="table-responsive mt-4">
+                        <table class="table table-sm">
+                            <thead><tr><th>Refund</th><th>Amount</th><th>Status</th><th>Reason</th><th>Requested</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($refunds as $refund): ?>
+                            <tr>
+                                <td><code><?php echo e((string) $refund['refund_reference']); ?></code></td>
+                                <td><?php echo e($money($refund['amount'], (string) $refund['currency'])); ?></td>
+                                <td><span class="badge bg-<?php echo $refund['status'] === 'successful' ? 'success' : ($refund['status'] === 'failed' ? 'danger' : 'secondary'); ?>">
+                                    <?php echo e((string) $refund['status']); ?></span></td>
+                                <td class="small"><?php echo e((string) ($refund['reason'] ?? '')); ?></td>
+                                <td class="small text-muted"><?php echo e((string) $refund['created_at']); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($canRefund): ?>
+                    <div class="card border mt-4">
+                        <div class="card-header">Refund this payment</div>
+                        <div class="card-body">
+                            <form class="row g-2 align-items-end" method="POST" action="<?php echo e(url('/payment_gateways')); ?>"
+                                  data-confirm="Send this refund? The sale it came from stays recorded.">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="refund">
+                                <input type="hidden" name="transaction_id" value="<?php echo (int) $transaction['transaction_id']; ?>">
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label" for="refund_amount">Amount</label>
+                                    <input class="form-control" type="number" step="0.01" min="0.01"
+                                           max="<?php echo e(number_format((float) $transaction['amount'] - $refundedSoFar, 2, '.', '')); ?>"
+                                           name="amount" id="refund_amount"
+                                           value="<?php echo e(number_format((float) $transaction['amount'] - $refundedSoFar, 2, '.', '')); ?>" required>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="refund_reason">Reason</label>
+                                    <input class="form-control" type="text" name="reason" id="refund_reason" maxlength="255"
+                                           placeholder="Returned item" required>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <button class="btn btn-warning w-100" type="submit"><i class="bi bi-arrow-counterclockwise me-1"></i>Refund</button>
+                                </div>
+                                <div class="col-12">
+                                    <div class="form-text">At most <?php echo e($money((float) $transaction['amount'] - $refundedSoFar, (string) $transaction['currency'])); ?>
+                                        can be refunded on this payment. Refunding does not undo the sale — restock it separately if the goods came back.</div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <details class="mt-4">
+                        <summary class="text-muted">Cart snapshot and provider responses</summary>
+                        <pre class="bg-body-tertiary p-3 mt-2 small text-wrap" style="max-height: 24rem; overflow: auto;"><?php
+                            echo e(json_encode([
+                                'cart' => json_decode((string) $transaction['payload'], true),
+                                'provider' => json_decode((string) $transaction['provider_response'], true),
+                            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                        ?></pre>
+                    </details>
+
+                    <a class="btn btn-sm btn-outline-secondary mt-3" href="<?php echo e(url('/payment_gateways?action=list')); ?>">
+                        <i class="bi bi-arrow-left me-1"></i>Back to the register
+                    </a>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- ================= Providers ================= -->
+            <div class="row g-3 mt-3">
+                <?php foreach ($configs as $gatewayKey => $config): ?>
+                <?php
+                $provider = $providers[$gatewayKey];
+                $canEdit = can('gateways', 'update');
+                $isLiveMode = $config['mode'] === 'live';
+                ?>
+                <div class="col-12 col-xl-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header fw-semibold d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span><i class="bi bi-credit-card-2-front-fill me-1"></i><?php echo e($config['label']); ?></span>
+                            <span class="d-flex gap-2">
+                                <span class="badge bg-<?php echo $config['is_enabled'] ? 'success' : 'secondary'; ?>">
+                                    <?php echo $config['is_enabled'] ? 'Enabled' : 'Disabled'; ?></span>
+                                <span class="badge bg-<?php echo $config['runtime_mode'] === 'live' ? 'danger' : ($config['runtime_mode'] === 'test' ? 'primary' : ($config['runtime_mode'] === 'sandbox' ? 'info' : 'dark')); ?>">
+                                    <?php echo e($config['runtime_mode']); ?></span>
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex flex-wrap gap-3 mb-3 small">
+                                <span><i class="bi bi-hash me-1"></i>Webhook endpoint
+                                    <code><?php echo e(gatewayWebhookUrl($gatewayKey)); ?></code></span>
+                                <span><i class="bi bi-signpost me-1"></i>Signature header
+                                    <code><?php echo e($provider['webhook_header']); ?></code></span>
+                                <span><i class="bi bi-file-lock me-1"></i>Algorithm
+                                    <code><?php echo e($provider['webhook_algorithm'] === 'plain' ? 'raw secret, compared' : strtoupper($provider['webhook_algorithm'])); ?></code></span>
+                            </div>
+
+                            <?php if (!$canEdit): ?>
+                            <p class="text-muted mb-0">You can watch payments through this provider but not change its keys.</p>
+                            <?php else: ?>
+                            <form method="POST" action="<?php echo e(url('/payment_gateways')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_config">
+                                <input type="hidden" name="gateway" value="<?php echo e($gatewayKey); ?>">
+
+                                <div class="row g-3 mb-3">
+                                    <div class="col-6 col-lg-4">
+                                        <label class="form-label" for="<?php echo e($gatewayKey); ?>_mode">Mode</label>
+                                        <select class="form-select" name="mode" id="<?php echo e($gatewayKey); ?>_mode">
+                                            <option value="test" <?php echo !$isLiveMode ? 'selected' : ''; ?>>Test (sandbox keys)</option>
+                                            <option value="live" <?php echo $isLiveMode ? 'selected' : ''; ?>>Live (real money)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-lg-8 d-flex align-items-center gap-4 pt-2">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" name="is_enabled" value="1"
+                                                   id="<?php echo e($gatewayKey); ?>_enabled" <?php echo $config['is_enabled'] ? 'checked' : ''; ?>>
+                                            <label class="form-check-label" for="<?php echo e($gatewayKey); ?>_enabled">Accept payments through this provider</label>
+                                        </div>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" name="sandbox_allowed" value="1"
+                                                   id="<?php echo e($gatewayKey); ?>_sandbox" <?php echo $config['sandbox_allowed'] ? 'checked' : ''; ?>>
+                                            <label class="form-check-label" for="<?php echo e($gatewayKey); ?>_sandbox">Simulate payments (test mode, no key)</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <?php foreach (['test' => 'Test', 'live' => 'Live'] as $modeKey => $modeLabel): ?>
+                                <?php $suffixes = ['public_key' => 'Public key', 'secret_key' => 'Secret key', 'webhook_secret' => 'Webhook secret']; ?>
+                                <?php foreach ($suffixes as $suffix => $suffixLabel): ?>
+                                <?php $field = $modeKey . '_' . $suffix; $state = $config['fields'][$field]; ?>
+                                <div class="row g-2 align-items-end mb-2">
+                                    <div class="col-5 col-lg-4">
+                                        <label class="form-label small mb-1" for="<?php echo e($gatewayKey . '_' . $field); ?>">
+                                            <?php echo e($modeLabel . ' ' . $suffixLabel); ?>
+                                            <?php if ($modeKey === 'live'): ?><span class="badge bg-danger-subtle text-danger">live</span><?php endif; ?>
+                                        </label>
+                                    </div>
+                                    <div class="col-7 col-lg-5">
+                                        <input class="form-control form-control-sm" type="<?php echo $state['secret'] ? 'password' : 'text'; ?>"
+                                               name="<?php echo e($field); ?>" id="<?php echo e($gatewayKey . '_' . $field); ?>"
+                                               autocomplete="new-password" placeholder="<?php echo $state['set'] ? 'stored — leave blank to keep' : 'paste key'; ?>">
+                                    </div>
+                                    <div class="col-12 col-lg-3">
+                                        <?php if ($state['set']): ?>
+                                        <div class="small text-muted">Stored <code><?php echo e($state['hint']); ?></code></div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="clear_<?php echo e($field); ?>" value="1"
+                                                   id="<?php echo e($gatewayKey . '_clear_' . $field); ?>">
+                                            <label class="form-check-label small" for="<?php echo e($gatewayKey . '_clear_' . $field); ?>">Forget</label>
+                                        </div>
+                                        <?php else: ?>
+                                        <div class="small text-muted">Not stored</div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                                <?php endforeach; ?>
+
+                                <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+                                    <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-save me-1"></i>Save <?php echo e($config['label']); ?></button>
+                                    <span class="text-muted small">
+                                        Last check:
+                                        <?php echo $config['last_checked_at'] ? e((string) $config['last_checked_at']) : 'never'; ?>
+                                        <?php if (trim((string) ($config['last_check_result'] ?? '')) !== ''): ?>
+                                        — <?php echo e((string) $config['last_check_result']); ?>
+                                        <?php endif; ?>
+                                    </span>
+                                </div>
+                            </form>
+                            <form class="d-inline mt-2" method="POST" action="<?php echo e(url('/payment_gateways')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="test">
+                                <input type="hidden" name="gateway" value="<?php echo e($gatewayKey); ?>">
+                                <button class="btn btn-sm btn-outline-primary" type="submit">
+                                    <i class="bi bi-plug me-1"></i>Test connection
+                                </button>
+                            </form>
+                            <?php endif; ?>
+
+                            <?php $linked = array_filter($onlineMethods, static fn ($m) => $m['gateway'] === $gatewayKey); ?>
+                            <div class="mt-3 small text-muted">
+                                <?php if ($linked === []): ?>
+                                <i class="bi bi-exclamation-triangle me-1"></i>No active payment method routes customers through
+                                    <?php echo e($config['label']); ?> yet. Saving this configuration creates one.
+                                <?php else: ?>
+                                Tender<?php echo count($linked) === 1 ? '' : 's'; ?> at the register:
+                                    <?php foreach ($linked as $method): ?>
+                                    <span class="badge bg-light text-dark"><?php echo e($method['code']); ?></span>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if ((int) $summary['total'] > 0): ?>
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6 col-lg-3"><div class="text-muted small">Sessions</div><div class="fs-4 fw-semibold"><?php echo (int) $summary['total']; ?></div></div>
+                        <div class="col-6 col-lg-3"><div class="text-muted small">Awaiting payment</div><div class="fs-4 fw-semibold"><?php echo (int) $summary['pending']; ?></div></div>
+                        <div class="col-6 col-lg-3"><div class="text-muted small">Paid</div><div class="fs-4 fw-semibold text-success"><?php echo (int) $summary['paid']; ?></div></div>
+                        <div class="col-6 col-lg-3"><div class="text-muted small">Paid but not posted</div><div class="fs-4 fw-semibold text-danger"><?php echo (int) $summary['unposted']; ?></div></div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- ================= Payment register ================= -->
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-list-columns-reverse me-1"></i>Payment sessions</span>
+                    <span class="text-muted small">Newest first, up to 100</span>
+                </div>
+                <div class="card-body">
+                    <form class="row g-2 mb-3" method="GET" action="<?php echo e(url('/payment_gateways')); ?>">
+                        <input type="hidden" name="action" value="list">
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1" for="f_gateway">Provider</label>
+                            <select class="form-select form-select-sm" name="gateway" id="f_gateway">
+                                <option value="">All</option>
+                                <?php foreach ($providers as $key => $provider): ?>
+                                <option value="<?php echo e($key); ?>" <?php echo $gatewayFilter === $key ? 'selected' : ''; ?>><?php echo e($provider['label']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1" for="f_status">Status</label>
+                            <select class="form-select form-select-sm" name="status" id="f_status">
+                                <option value="">Any</option>
+                                <?php foreach ($statusNames as $value => $label): ?>
+                                <option value="<?php echo e($value); ?>" <?php echo $filters['status'] === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small mb-1" for="f_reference">Reference</label>
+                            <input class="form-control form-control-sm" type="text" name="reference" id="f_reference"
+                                   value="<?php echo e($filters['reference']); ?>" placeholder="PAREF-…">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1" for="f_from">From</label>
+                            <input class="form-control form-control-sm" type="date" name="from" id="f_from" value="<?php echo e($filters['from']); ?>">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1" for="f_to">To</label>
+                            <input class="form-control form-control-sm" type="date" name="to" id="f_to" value="<?php echo e($filters['to']); ?>">
+                        </div>
+                        <div class="col-6 col-md-1 d-flex align-items-end">
+                            <button class="btn btn-sm btn-primary w-100" type="submit"><i class="bi bi-funnel"></i></button>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                            <tr>
+                                <th>Reference</th><th>Provider</th><th>Mode</th><th class="text-end">Amount</th>
+                                <th>Status</th><th>Sale</th><th>Simulated</th><th>Created</th><th></th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <?php if ($transactions === []): ?>
+                            <tr><td colspan="9" class="text-muted">No payment sessions match these filters.</td></tr>
+                            <?php endif; ?>
+                            <?php foreach ($transactions as $row): ?>
+                            <tr>
+                                <td><a href="<?php echo e(url('/payment_gateways?action=detail&transaction_id=' . (int) $row['transaction_id'])); ?>">
+                                    <code><?php echo e((string) $row['reference']); ?></code></a></td>
+                                <td><?php echo e(gatewayProviderLabel((string) $row['gateway'])); ?></td>
+                                <td class="small"><?php echo e((string) $row['mode']); ?></td>
+                                <td class="text-end"><?php echo e($money($row['amount'], (string) $row['currency'])); ?>
+                                    <?php if ((float) $row['refunded_amount'] > 0): ?>
+                                    <div class="small text-warning">− <?php echo e($money($row['refunded_amount'], (string) $row['currency'])); ?> refunded</div>
+                                    <?php endif; ?></td>
+                                <td><span class="badge bg-<?php echo e($statusStyles[(string) $row['status']] ?? 'secondary'); ?>">
+                                    <?php echo e($statusNames[(string) $row['status']] ?? $row['status']); ?></span>
+                                    <?php if (trim((string) ($row['failure_reason'] ?? '')) !== ''): ?>
+                                    <div class="small text-muted"><?php echo e(mb_substr((string) $row['failure_reason'], 0, 80)); ?></div>
+                                    <?php endif; ?></td>
+                                <td><?php echo $row['invoice_number']
+                                    ? '<a href="' . e(url('/sales?action=receipt&sale_id=' . (int) $row['invoice_id'])) . '">' . e((string) $row['invoice_number']) . '</a>'
+                                    : '<span class="text-muted">—</span>'; ?></td>
+                                <td><?php echo (int) $row['simulates_payment'] === 1 ? '<span class="badge bg-info-subtle text-info-emphasis">simulated</span>' : '<span class="text-muted">real</span>'; ?></td>
+                                <td class="small text-muted"><?php echo e((string) $row['created_at']); ?></td>
+                                <td class="text-nowrap">
+                                    <?php if (can('gateways', 'verify')): ?>
+                                    <form class="d-inline" method="POST" action="<?php echo e(url('/payment_gateways')); ?>">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="verify">
+                                        <input type="hidden" name="transaction_id" value="<?php echo (int) $row['transaction_id']; ?>">
+                                        <button class="btn btn-sm btn-outline-primary" title="Verify with the provider" type="submit">
+                                            <i class="bi bi-shield-check"></i>
+                                        </button>
+                                    </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= Reconciliation ================= -->
+            <div class="card border-0 shadow-sm mt-4" id="reconciliation">
+                <div class="card-header fw-semibold"><i class="bi bi-diagram-3 me-1"></i>Reconciliation</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <?php foreach ([
+                            ['captured', 'Captured by providers'],
+                            ['posted', 'Posted as sales'],
+                            ['unposted', 'Captured, not posted'],
+                            ['refunded', 'Refunded'],
+                            ['simulated_captured', 'Of which simulated'],
+                        ] as [$key, $label]): ?>
+                        <div class="col-6 col-lg-2">
+                            <div class="text-muted small"><?php echo e($label); ?></div>
+                            <div class="fs-5 fw-semibold"><?php echo e(number_format((float) $reconciliation['totals'][$key], 2)); ?></div>
+                        </div>
+                        <?php endforeach; ?>
+                        <?php if (can('gateways', 'verify')): ?>
+                        <div class="col-12 col-lg-2 d-flex align-items-end">
+                            <form class="d-flex gap-2 align-items-end" method="POST" action="<?php echo e(url('/payment_gateways')); ?>#reconciliation">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="expire">
+                                <div>
+                                    <label class="form-label small mb-1" for="expire_minutes">Expire pending older than</label>
+                                    <input class="form-control form-control-sm" type="number" min="1" max="10080" step="1"
+                                           name="minutes" id="expire_minutes" value="60" style="width: 8rem;">
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">Run</button>
+                            </form>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php
+                    $bucketLabels = [
+                        'paid_not_posted' => ['Paid but never posted', 'The provider took money and no sale exists. Verify the reference — that is what posts it.'],
+                        'posted_not_paid' => ['Posted with no payment behind it', 'A sale linked to a session the provider does not call paid.'],
+                        'amount_drift' => ['Amount does not match the sale', 'Settled short, over-paid, or the catalogue changed while the customer was at the gateway.'],
+                        'duplicate_capture' => ['Two payments on one sale', 'The same invoice was funded twice. Refund the extra capture.'],
+                        'stale_pending' => ['Still pending after 15 minutes', 'Customers who abandoned checkout. Expire them or verify to settle the question.'],
+                        'refund_mismatch' => ['Refund status disagrees', 'A refund row and the payment it belongs to report different totals.'],
+                    ];
+                    $anything = false;
+                    foreach ($bucketLabels as $bucket => [$title, $advice]):
+                        $rows = $reconciliation['buckets'][$bucket] ?? [];
+                        if ($rows === []) {
+                            continue;
+                        }
+                        $anything = true;
+                    ?>
+                    <div class="mt-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-1"><?php echo e($title); ?> <span class="badge bg-danger-subtle text-danger-emphasis"><?php echo count($rows); ?></span></h6>
+                        </div>
+                        <div class="text-muted small mb-2"><?php echo e($advice); ?></div>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                <?php foreach (array_slice($rows, 0, 10) as $row): ?>
+                                <tr>
+                                    <td style="width: 20rem;"><a href="<?php echo e(url('/payment_gateways?action=detail&transaction_id=' . (int) $row['transaction_id'])); ?>">
+                                        <code><?php echo e((string) $row['reference']); ?></code></a></td>
+                                    <td><?php echo e($money($row['amount'], (string) ($row['currency'] ?? ''))); ?></td>
+                                    <td class="small text-muted"><?php echo e((string) ($row['failure_reason'] ?? '')); ?></td>
+                                    <td class="small text-muted"><?php echo e((string) ($row['created_at'] ?? '')); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                    <?php if (!$anything): ?>
+                    <p class="text-success mt-4 mb-0"><i class="bi bi-check2-circle me-1"></i>The gateway and the ledger agree for this period.</p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- ================= Webhook log ================= -->
+            <div class="card border-0 shadow-sm mt-4 mb-4">
+                <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-antenna me-1"></i>Provider callbacks</span>
+                    <span class="text-muted small">Last 25, payloads kept as received</span>
+                </div>
+                <div class="card-body">
+                    <?php if ($events === []): ?>
+                    <p class="text-muted mb-0">No callbacks have arrived. Point the provider's webhook at
+                        <code><?php echo e(gatewayWebhookUrl('paystack')); ?></code> and the same for each provider you enable.</p>
+                    <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Received</th><th>Provider</th><th>Event</th><th>Reference</th><th>Signature</th><th>What we did</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($events as $event): ?>
+                            <tr>
+                                <td class="small text-muted"><?php echo e((string) $event['created_at']); ?></td>
+                                <td><?php echo e(gatewayProviderLabel((string) $event['gateway'])); ?></td>
+                                <td><code><?php echo e((string) $event['event_type']); ?></code></td>
+                                <td><?php if ((string) $event['transaction_ref'] !== ''): ?>
+                                    <a href="<?php echo e(url('/payment_gateways?action=list&reference=' . rawurlencode((string) $event['transaction_ref']))); ?>">
+                                        <code><?php echo e((string) $event['transaction_ref']); ?></code></a>
+                                    <?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
+                                <td><span class="badge bg-<?php echo (int) $event['signature_valid'] === 1 ? 'success' : 'danger'; ?>">
+                                    <?php echo (int) $event['signature_valid'] === 1 ? 'valid' : 'rejected'; ?></span></td>
+                                <td class="small"><?php echo e((string) ($event['result'] ?? 'not processed')); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+<?php ob_start(); ?>
+<script>
+    (function () {
+        'use strict';
+        document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!window.confirm(form.getAttribute('data-confirm'))) {
+                    event.preventDefault();
+                }
+            });
+        });
+    })();
+</script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

@@ -1,0 +1,401 @@
+<?php
+$pageHeading = 'Reports';
+$pageEyebrow = 'Financial statements';
+$pageDescription = 'Statements computed from recorded income, expenses, payments and posted journal entries.';
+$activeNav = 'report';
+ob_start();
+?>
+<span class="badge bg-secondary align-self-center"><?php echo count($reports); ?> reports</span>
+<?php foreach ($reportTypes as $typeKey => $typeLabel): ?>
+<?php if ($reportCounts[$typeKey] > 0): ?>
+<span class="badge bg-info text-dark align-self-center"><?php echo e($typeLabel); ?>: <?php echo (int) $reportCounts[$typeKey]; ?></span>
+<?php endif; ?>
+<?php endforeach; ?>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Create report</div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/report?action=list')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="create_report">
+                                <div class="mb-3">
+                                    <label class="form-label" for="report_type">Report type</label>
+                                    <select class="form-select" id="report_type" name="report_type">
+                                        <?php foreach ($reportTypes as $value => $label): ?>
+                                        <option value="<?php echo e($value); ?>"><?php echo e($label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="report_name">Report name</label>
+                                    <input class="form-control" id="report_name" name="report_name" maxlength="100" placeholder="Auto-generated when blank">
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="period_start">Period start</label>
+                                        <input class="form-control" type="date" id="period_start" name="period_start" value="<?php echo e(date('Y-m-01')); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="period_end">Period end</label>
+                                        <input class="form-control" type="date" id="period_end" name="period_end" value="<?php echo e(date('Y-m-d')); ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="description">Description</label>
+                                    <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-calculator me-2"></i>Generate report</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Saved reports</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Report</th>
+                                        <th>Type</th>
+                                        <th>Period</th>
+                                        <th>Status</th>
+                                        <th>Generated</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($reports === []): ?>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No reports yet. Generate the first statement on the left.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($reports as $reportRow): ?>
+                                    <tr>
+                                        <td><?php echo e($reportRow['report_name']); ?></td>
+                                        <td><?php echo e($reportTypes[$reportRow['report_type']] ?? $reportRow['report_type']); ?></td>
+                                        <td><?php echo e(date('M d, Y', strtotime($reportRow['period_start'])) . ' – ' . date('M d, Y', strtotime($reportRow['period_end']))); ?></td>
+                                        <td><span class="badge bg-<?php echo $reportRow['status'] === 'generated' ? 'success' : ($reportRow['status'] === 'exported' ? 'info text-dark' : 'secondary'); ?>"><?php echo e(ucfirst($reportRow['status'])); ?></span></td>
+                                        <td>
+                                            <?php echo e(date('M d, Y H:i', strtotime($reportRow['generated_at']))); ?>
+                                            <div class="small text-muted"><?php echo e($reportRow['generated_by_name'] ?? '—'); ?></div>
+                                        </td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/report?action=list&report_id=' . (int) $reportRow['report_id'])); ?>">View</a>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/report?action=list')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="regenerate_report">
+                                                <input type="hidden" name="report_id" value="<?php echo (int) $reportRow['report_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Regenerate"><i class="fas fa-sync-alt"></i></button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($report !== []): ?>
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <span class="fw-semibold"><?php echo e($report['report_name']); ?></span>
+                        <span class="badge bg-secondary ms-2"><?php echo e($reportTypes[$report['report_type']] ?? $report['report_type']); ?></span>
+                        <div class="small text-muted mt-1">
+                            <?php echo e(date('M d, Y', strtotime($report['period_start'])) . ' – ' . date('M d, Y', strtotime($report['period_end']))); ?>
+                            &middot; generated <?php echo e(date('M d, Y H:i', strtotime($report['generated_at']))); ?>
+                            <?php if (!empty($report['generated_by_name'])): ?> by <?php echo e($report['generated_by_name']); ?><?php endif; ?>
+                        </div>
+                        <?php if (!empty($report['description'])): ?><div class="small text-muted"><?php echo e($report['description']); ?></div><?php endif; ?>
+                    </div>
+                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/report?action=list')); ?>">Close</a>
+                </div>
+                <div class="card-body">
+                    <?php if (!empty($reportData['note'])): ?>
+                    <p class="text-muted small"><?php echo e($reportData['note']); ?></p>
+                    <?php endif; ?>
+
+                    <?php if ($report['report_type'] === 'income_statement'): ?>
+                    <?php $net = (float) ($reportData['net_income'] ?? 0); ?>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total income</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['income_total'] ?? 0)); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total expenses</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['expense_total'] ?? 0)); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Net income</div><div class="h5 mb-0 text-<?php echo $net >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice($net); ?></div></div></div>
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-12 col-lg-6">
+                            <h6 class="fw-semibold">Income by source</h6>
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Source</th><th class="text-end">Amount</th></tr></thead>
+                                <tbody>
+                                    <?php if (($reportData['income_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No income recorded for this period.</td></tr><?php endif; ?>
+                                    <?php foreach (($reportData['income_rows'] ?? []) as $line): ?>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot><tr class="fw-semibold"><td>Total income</td><td class="text-end"><?php echo formatPrice((float) ($reportData['income_total'] ?? 0)); ?></td></tr></tfoot>
+                            </table>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <h6 class="fw-semibold">Expenses by category</h6>
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Category</th><th class="text-end">Amount</th></tr></thead>
+                                <tbody>
+                                    <?php if (($reportData['expense_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No expenses recorded for this period.</td></tr><?php endif; ?>
+                                    <?php foreach (($reportData['expense_rows'] ?? []) as $line): ?>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot><tr class="fw-semibold"><td>Total expenses</td><td class="text-end"><?php echo formatPrice((float) ($reportData['expense_total'] ?? 0)); ?></td></tr></tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($report['report_type'] === 'balance_sheet'): ?>
+                    <?php $check = (float) ($reportData['balance_check'] ?? 0); ?>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total assets</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['asset_total'] ?? 0)); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Liabilities</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['liability_total'] ?? 0)); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Equity (incl. retained)</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['total_equity'] ?? 0)); ?></div></div></div>
+                    </div>
+                    <div class="mb-3">
+                        <span class="badge bg-<?php echo abs($check) < 0.0001 ? 'success' : 'warning text-dark'; ?>">
+                            <?php echo abs($check) < 0.0001 ? 'Assets balance to liabilities and equity' : 'Out of balance by ' . formatPrice(abs($check)); ?>
+                        </span>
+                    </div>
+                    <div class="row g-4">
+                        <?php foreach ([
+                            'Assets' => ['rows' => $reportData['asset_rows'] ?? [], 'total' => $reportData['asset_total'] ?? 0],
+                            'Liabilities' => ['rows' => $reportData['liability_rows'] ?? [], 'total' => $reportData['liability_total'] ?? 0],
+                            'Equity' => ['rows' => $reportData['equity_rows'] ?? [], 'total' => $reportData['equity_total'] ?? 0],
+                        ] as $sectionTitle => $section): ?>
+                        <div class="col-12 col-lg-4">
+                            <h6 class="fw-semibold"><?php echo e($sectionTitle); ?></h6>
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Account</th><th class="text-end">Balance</th></tr></thead>
+                                <tbody>
+                                    <?php if ($section['rows'] === []): ?><tr><td colspan="2" class="text-muted">No <?php echo strtolower($sectionTitle); ?> accounts with activity.</td></tr><?php endif; ?>
+                                    <?php foreach ($section['rows'] as $line): ?>
+                                    <tr><td><?php echo e($line['account_code'] . ' — ' . $line['account_name']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['balance']); ?></td></tr>
+                                    <?php endforeach; ?>
+                                    <?php if ($sectionTitle === 'Equity'): ?>
+                                    <tr class="fst-italic"><td>Retained earnings</td><td class="text-end"><?php echo formatPrice((float) ($reportData['retained_earnings'] ?? 0)); ?></td></tr>
+                                    <?php endif; ?>
+                                </tbody>
+                                <tfoot><tr class="fw-semibold"><td>Total <?php echo strtolower($sectionTitle); ?></td><td class="text-end"><?php echo formatPrice($sectionTitle === 'Equity' ? (float) ($reportData['total_equity'] ?? 0) : (float) $section['total']); ?></td></tr></tfoot>
+                            </table>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($report['report_type'] === 'cash_flow'): ?>
+                    <?php $netCash = (float) ($reportData['net_cash_flow'] ?? 0); ?>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total inflows</div><div class="h5 mb-0 text-success"><?php echo formatPrice((float) ($reportData['inflow_total'] ?? 0)); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total outflows</div><div class="h5 mb-0 text-danger"><?php echo formatPrice((float) ($reportData['outflow_total'] ?? 0)); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Net cash flow</div><div class="h5 mb-0 text-<?php echo $netCash >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice($netCash); ?></div></div></div>
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-12 col-lg-6">
+                            <h6 class="fw-semibold">Inflows</h6>
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Source</th><th class="text-end">Amount</th></tr></thead>
+                                <tbody>
+                                    <?php if (($reportData['inflow_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No cash inflows for this period.</td></tr><?php endif; ?>
+                                    <?php foreach (($reportData['inflow_rows'] ?? []) as $line): ?>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot><tr class="fw-semibold"><td>Total inflows</td><td class="text-end"><?php echo formatPrice((float) ($reportData['inflow_total'] ?? 0)); ?></td></tr></tfoot>
+                            </table>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <h6 class="fw-semibold">Outflows</h6>
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Use</th><th class="text-end">Amount</th></tr></thead>
+                                <tbody>
+                                    <?php if (($reportData['outflow_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No cash outflows for this period.</td></tr><?php endif; ?>
+                                    <?php foreach (($reportData['outflow_rows'] ?? []) as $line): ?>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot><tr class="fw-semibold"><td>Total outflows</td><td class="text-end"><?php echo formatPrice((float) ($reportData['outflow_total'] ?? 0)); ?></td></tr></tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($report['report_type'] === 'trial_balance'): ?>
+                    <?php $tbDebit = (float) ($reportData['total_debit'] ?? 0); $tbCredit = (float) ($reportData['total_credit'] ?? 0); ?>
+                    <div class="mb-3">
+                        <span class="badge bg-<?php echo abs($tbDebit - $tbCredit) < 0.0001 ? 'success' : 'danger'; ?>">
+                            Debits <?php echo formatPrice($tbDebit); ?> / Credits <?php echo formatPrice($tbCredit); ?>
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Code</th><th>Account</th><th>Type</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
+                            <tbody>
+                                <?php if (($reportData['rows'] ?? []) === []): ?><tr><td colspan="5" class="text-center text-muted py-3">No chart of accounts defined.</td></tr><?php endif; ?>
+                                <?php foreach (($reportData['rows'] ?? []) as $line): ?>
+                                <tr>
+                                    <td><?php echo e($line['account_code']); ?></td>
+                                    <td><?php echo e($line['account_name']); ?></td>
+                                    <td><span class="badge bg-secondary"><?php echo e($line['account_type']); ?></span></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['debit_total']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['credit_total']); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot><tr class="fw-semibold"><td colspan="3">Totals</td><td class="text-end"><?php echo formatPrice($tbDebit); ?></td><td class="text-end"><?php echo formatPrice($tbCredit); ?></td></tr></tfoot>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($report['report_type'] === 'general_ledger'): ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Date</th><th>Entry</th><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
+                            <tbody>
+                                <?php if (($reportData['rows'] ?? []) === []): ?><tr><td colspan="6" class="text-center text-muted py-3">No posted journal lines for this period.</td></tr><?php endif; ?>
+                                <?php foreach (($reportData['rows'] ?? []) as $line): ?>
+                                <tr>
+                                    <td><?php echo e(date('M d, Y', strtotime($line['entry_date']))); ?></td>
+                                    <td><?php echo e($line['entry_number']); ?></td>
+                                    <td><?php echo e(trim(($line['account_code'] ?? '') . ' — ' . ($line['account_name'] ?? ''), ' —')); ?></td>
+                                    <td><?php echo e($line['description'] ?: ($line['entry_description'] ?? '')); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['debit_amount']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['credit_amount']); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot><tr class="fw-semibold"><td colspan="4">Totals</td><td class="text-end"><?php echo formatPrice((float) ($reportData['total_debit'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($reportData['total_credit'] ?? 0)); ?></td></tr></tfoot>
+                        </table>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($report['report_type'] === 'sales_analytics'): ?>
+                    <?php
+                    $analytics = $reportData;
+                    $analyticsSummary = $analytics['summary'] ?? [];
+                    $analyticsRows = $analytics['rows'] ?? [];
+                    $analyticsCollection = $analytics['collection'] ?? [];
+                    ?>
+                    <form class="row g-2 align-items-end mb-4" method="GET" action="<?php echo e(url('/report')); ?>">
+                        <input type="hidden" name="action" value="list">
+                        <input type="hidden" name="report_id" value="<?php echo (int) $report['report_id']; ?>">
+                        <div class="col-12 col-sm-4 col-lg-3">
+                            <label class="form-label small mb-1" for="group_by">Break down</label>
+                            <select class="form-select form-select-sm" id="group_by" name="group_by">
+                                <?php foreach (reportAnalyticsDimensions() as $value => $label): ?>
+                                <option value="<?php echo e($value); ?>" <?php echo ($analytics['group_by'] ?? 'day') === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-sm-4 col-lg-3">
+                            <label class="form-label small mb-1" for="branch_id">Branch</label>
+                            <select class="form-select form-select-sm" id="branch_id" name="branch_id">
+                                <option value="0">All branches</option>
+                                <?php foreach ($branches as $branch): ?>
+                                <option value="<?php echo (int) $branch['branch_id']; ?>" <?php echo (int) ($analytics['branch_id'] ?? 0) === (int) $branch['branch_id'] ? 'selected' : ''; ?>><?php echo e($branch['name'] . (empty($branch['is_active']) ? ' (inactive)' : '')); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-sm-4 col-lg-2">
+                            <button class="btn btn-sm btn-outline-primary" type="submit"><i class="fas fa-filter me-1"></i>Apply</button>
+                        </div>
+                    </form>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Net sales</div><div class="h5 mb-0"><?php echo formatPrice((float) ($analyticsSummary['net'] ?? 0)); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['invoiced'] ?? 0)); ?> invoiced</div></div></div>
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Gross profit</div><div class="h5 mb-0 text-<?php echo (float) ($analyticsSummary['gross_profit'] ?? 0) >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice((float) ($analyticsSummary['gross_profit'] ?? 0)); ?></div><div class="small text-muted"><?php echo number_format((float) ($analyticsSummary['margin'] ?? 0), 1); ?>% margin</div></div></div>
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Transactions</div><div class="h5 mb-0"><?php echo (int) ($analyticsSummary['transactions'] ?? 0); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['average_sale'] ?? 0)); ?> average sale</div></div></div>
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Units sold</div><div class="h5 mb-0"><?php echo number_format((float) ($analyticsSummary['units'] ?? 0), 2); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['cogs'] ?? 0)); ?> cost of goods</div></div></div>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-3 small text-muted mb-3">
+                        <span>Gross sales <?php echo formatPrice((float) ($analyticsSummary['gross'] ?? 0)); ?></span>
+                        <span>Discounts <?php echo formatPrice((float) ($analyticsSummary['discount_total'] ?? 0)); ?> (<?php echo number_format((float) ($analyticsSummary['discount_rate'] ?? 0), 1); ?>%)</span>
+                        <span>Tax <?php echo formatPrice((float) ($analyticsSummary['tax'] ?? 0)); ?></span>
+                        <span>Markup <?php echo number_format((float) ($analyticsSummary['markup'] ?? 0), 1); ?>%</span>
+                    </div>
+
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th><?php echo e($analytics['group_by_label'] ?? 'Breakdown'); ?></th><th class="text-end">Txns</th><th class="text-end">Units</th><th class="text-end">Gross</th><th class="text-end">Discounts</th><th class="text-end">Net</th><th class="text-end">Tax</th><th class="text-end">COGS</th><th class="text-end">Profit</th><th class="text-end">Margin</th></tr></thead>
+                            <tbody>
+                                <?php if ($analyticsRows === []): ?><tr><td colspan="10" class="text-center text-muted py-3">No sales recorded for this period.</td></tr><?php endif; ?>
+                                <?php foreach ($analyticsRows as $line): ?>
+                                <tr>
+                                    <td><?php echo e($line['label']); ?></td>
+                                    <td class="text-end"><?php echo (int) $line['transactions']; ?></td>
+                                    <td class="text-end"><?php echo number_format((float) $line['units'], 2); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['gross']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['discount_total']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['net']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['tax']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['cogs']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['gross_profit']); ?></td>
+                                    <td class="text-end"><?php echo number_format((float) $line['margin'], 1); ?>%</td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end"><?php echo (int) ($analyticsSummary['transactions'] ?? 0); ?></td><td class="text-end"><?php echo number_format((float) ($analyticsSummary['units'] ?? 0), 2); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['gross'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['discount_total'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['net'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['tax'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['cogs'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['gross_profit'] ?? 0)); ?></td><td class="text-end"><?php echo number_format((float) ($analyticsSummary['margin'] ?? 0), 1); ?>%</td></tr></tfoot>
+                        </table>
+                    </div>
+                    <?php if (!empty($analytics['truncated'])): ?><p class="small text-warning">Showing the first 400 rows; narrow the period to see the rest.</p><?php endif; ?>
+
+                    <div class="row g-4">
+                        <div class="col-12 col-lg-6">
+                            <h6 class="fw-semibold">How it was paid</h6>
+                            <table class="table table-sm align-middle mb-0">
+                                <thead><tr><th>Method</th><th class="text-end">Payments</th><th class="text-end">Amount</th></tr></thead>
+                                <tbody>
+                                    <?php if (($analytics['tenders'] ?? []) === []): ?><tr><td colspan="3" class="text-muted">No payments received in this period.</td></tr><?php endif; ?>
+                                    <?php foreach (($analytics['tenders'] ?? []) as $tender): ?>
+                                    <tr>
+                                        <td><?php echo e($tender['label']); ?><?php if ($tender['is_cash']): ?> <span class="badge bg-success">Cash</span><?php endif; ?></td>
+                                        <td class="text-end"><?php echo (int) $tender['payment_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $tender['amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="fw-semibold"><td>Received</td><td></td><td class="text-end"><?php echo formatPrice((float) ($analytics['tender_total'] ?? 0)); ?></td></tr>
+                                    <tr><td class="text-muted small" colspan="2">Cash / non-cash</td><td class="text-end small"><?php echo formatPrice((float) ($analytics['cash_total'] ?? 0)); ?> / <?php echo formatPrice((float) ($analytics['non_cash_total'] ?? 0)); ?></td></tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <h6 class="fw-semibold">Collection</h6>
+                            <table class="table table-sm align-middle mb-0">
+                                <tbody>
+                                    <tr><td>Invoiced in this period</td><td class="text-end"><?php echo formatPrice((float) ($analyticsCollection['invoiced'] ?? 0)); ?></td></tr>
+                                    <tr><td>Received in this period</td><td class="text-end text-success"><?php echo formatPrice((float) ($analyticsCollection['collected_in_period'] ?? 0)); ?></td></tr>
+                                    <tr><td>Still outstanding on this period's bills</td><td class="text-end text-<?php echo (float) ($analyticsCollection['outstanding'] ?? 0) > 0 ? 'danger' : 'success'; ?>"><?php echo formatPrice((float) ($analyticsCollection['outstanding'] ?? 0)); ?></td></tr>
+                                    <tr><td>Unpaid invoices</td><td class="text-end"><?php echo (int) ($analyticsCollection['unpaid_invoices'] ?? 0); ?></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+<?php require APP_ROOT . '/views/layout/footer.php'; ?>

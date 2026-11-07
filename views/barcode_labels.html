@@ -1,0 +1,123 @@
+<?php
+/**
+ * Printable barcode label sheet (standalone: no app chrome, print CSS only).
+ * Expects: $labels, $labelPresets, $presetKey, $symbology, $copies, $showPrice, $company
+ */
+$preset = $labelPresets[$presetKey];
+$roll = $presetKey !== 'sheet';
+$companyName = (string) ($company['name'] ?? '');
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Barcode labels · <?php echo e($companyName ?: 'Inventory'); ?></title>
+    <style>
+        :root {
+            --label-w: <?php echo e(number_format($preset['width'], 1, '.', '')); ?>mm;
+            --label-h: <?php echo e(number_format($preset['height'], 1, '.', '')); ?>mm;
+            --label-gap: <?php echo e(number_format($preset['gap'], 1, '.', '')); ?>mm;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: #eef1f5;
+            font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+            color: #000;
+        }
+        .toolbar {
+            display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+            padding: .8rem 1rem; background: #1f2a37; color: #fff;
+        }
+        .toolbar strong { font-size: .95rem; }
+        .toolbar .meta { font-size: .8rem; opacity: .8; }
+        .toolbar button, .toolbar a {
+            background: #fff; color: #1f2a37; border: 0; border-radius: 6px;
+            padding: .45rem .8rem; font-size: .85rem; text-decoration: none; cursor: pointer;
+        }
+        .sheet { padding: 1rem; }
+        .labels {
+            display: grid;
+            gap: var(--label-gap);
+            justify-content: center;
+            background: #fff;
+            padding: 6mm 0;
+            margin: 0 auto;
+            width: <?php echo $roll ? 'calc(var(--label-w) + 12mm)' : '210mm'; ?>;
+            <?php if (!$roll): ?>grid-template-columns: repeat(<?php echo (int) $preset['cols']; ?>, var(--label-w));<?php endif; ?>
+        }
+        .label {
+            width: var(--label-w);
+            height: var(--label-h);
+            border: <?php echo $roll ? '1px dashed #bbb' : '1px solid #ddd'; ?>;
+            padding: 1.4mm 2mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            background: #fff;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        <?php if ($roll): ?>
+        .label + .label { page-break-before: auto; }
+        <?php endif; ?>
+        .label .top { font-size: 6.5pt; line-height: 1.1; }
+        .label .name { font-weight: 700; font-size: 7.5pt; }
+        .label .price { font-weight: 700; font-size: 8pt; }
+        .label .bc { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; margin-top: .6mm; }
+        .label .bc svg { width: 100%; height: 100%; display: block; }
+        .label .code { font-size: 6.5pt; text-align: center; font-family: ui-monospace, "Courier New", monospace; }
+        .label .error { color: #b00020; font-size: 7pt; }
+        @page { margin: 0; <?php if ($roll): ?>size: <?php echo e(number_format($preset['width'], 1, '.', '')); ?>mm auto;<?php else: ?>size: A4 portrait; margin: 8mm;<?php endif; ?> }
+        @media print {
+            body { background: #fff; }
+            .toolbar { display: none !important; }
+            .sheet { padding: 0; }
+            .labels { border: 0; padding: 0; width: auto; background: #fff; }
+            .label { border: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="toolbar">
+    <strong><?php echo count($labels); ?> label<?php echo count($labels) === 1 ? '' : 's'; ?></strong>
+    <span class="meta"><?php echo e($preset['desc']); ?> · <?php echo e($preset['width'] . '×' . $preset['height']); ?> mm ·
+        <?php echo e($symbology); ?> · <?php echo (int) $copies; ?> copy each</span>
+    <button type="button" onclick="window.print()">Print</button>
+    <a href="<?php echo e(url('/barcodes?action=manage')); ?>">Back to barcodes</a>
+    <span class="meta">Set the printer's paper size to the label width and turn scaling off.</span>
+</div>
+<div class="sheet">
+    <div class="labels">
+        <?php foreach ($labels as $label): ?>
+        <?php $product = $label['product']; ?>
+        <div class="label">
+            <div class="top">
+                <?php if ($companyName !== ''): ?><div><?php echo e($companyName); ?></div><?php endif; ?>
+                <div class="name"><?php echo e($product['name'] ?? ''); ?></div>
+                <?php if (!empty($label['error'])): ?>
+                <div class="error"><?php echo e($label['error']); ?></div>
+                <?php endif; ?>
+            </div>
+            <div class="bc">
+                <?php if (!empty($label['svg'])): ?>
+                <?php echo $label['svg']; /* server-generated SVG of our own barcode data */ ?>
+                <?php endif; ?>
+            </div>
+            <div class="code">
+                <?php if (!empty($label['code']) && $label['symbology'] === 'qr'): ?>
+                <?php echo e($label['code']); ?>
+                <?php endif; ?>
+                <?php if ($showPrice): ?>
+                <span class="price"><?php echo e(number_format((float) ($product['sales_price'] ?? 0), 2)); ?></span>
+                <?php endif; ?>
+                <span><?php echo e($product['sku'] ?? ''); ?></span>
+            </div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+</body>
+</html>

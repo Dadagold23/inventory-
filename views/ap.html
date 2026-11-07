@@ -1,0 +1,589 @@
+<?php
+$pageHeading = 'Suppliers & Purchases';
+$pageEyebrow = 'Accounts payable';
+$pageDescription = 'Suppliers, purchase orders, invoice matching and vendor payments.';
+$activeNav = 'ap';
+ob_start();
+?>
+<span class="badge bg-secondary align-self-center">Terms: <?php echo e($apTerms); ?></span>
+<span class="badge bg-danger align-self-center">Outstanding: <?php echo formatPrice($totalOutstanding); ?></span>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                        <div class="text-muted small text-uppercase">Suppliers</div>
+                        <div class="fs-4 fw-semibold"><?php echo count($suppliers); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                        <div class="text-muted small text-uppercase">Purchase Orders</div>
+                        <div class="fs-4 fw-semibold"><?php echo count($pos); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                        <div class="text-muted small text-uppercase">Invoice Receipts</div>
+                        <div class="fs-4 fw-semibold"><?php echo count($invoices); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                        <div class="text-muted small text-uppercase">Total Paid</div>
+                        <div class="fs-4 fw-semibold"><?php echo formatPrice($totalPaid); ?></div>
+                    </div></div>
+                </div>
+            </div>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'suppliers' ? 'active' : ''; ?>" href="<?php echo e(url('/ap?action=suppliers')); ?>">Suppliers</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'purchase_orders' ? 'active' : ''; ?>" href="<?php echo e(url('/ap?action=purchase_orders')); ?>">Purchase Orders</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'invoices' ? 'active' : ''; ?>" href="<?php echo e(url('/ap?action=invoices')); ?>">Invoice Receipts</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'payments' ? 'active' : ''; ?>" href="<?php echo e(url('/ap?action=payments')); ?>">Payments</a></li>
+            </ul>
+
+            <?php if ($action === 'suppliers'): ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold"><?php echo $supplier !== [] ? 'Edit supplier' : 'Add supplier'; ?></span>
+                            <?php if ($supplier !== []): ?>
+                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/ap?action=suppliers')); ?>">New</a>
+                            <?php endif; ?>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/ap?action=suppliers')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_supplier">
+                                <input type="hidden" name="supplier_id" value="<?php echo (int) ($supplier['vendor_id'] ?? 0); ?>">
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="supplier_name">Supplier name <span class="text-danger">*</span></label>
+                                    <input class="form-control" id="supplier_name" name="supplier_name" required value="<?php echo e($supplier['name'] ?? ''); ?>">
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="contact_name">Contact</label>
+                                        <input class="form-control" id="contact_name" name="contact_name" value="<?php echo e($supplier['contact_name'] ?? ''); ?>">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="tax_id">Tax ID</label>
+                                        <input class="form-control" id="tax_id" name="tax_id" value="<?php echo e($supplier['tax_id'] ?? ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="email">Email</label>
+                                        <input class="form-control" id="email" name="email" type="email" value="<?php echo e($supplier['email'] ?? ''); ?>">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="phone">Phone</label>
+                                        <input class="form-control" id="phone" name="phone" value="<?php echo e($supplier['phone'] ?? ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="address">Address</label>
+                                    <textarea class="form-control" id="address" name="address" rows="2"><?php echo e($supplier['address'] ?? ''); ?></textarea>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="city">City</label>
+                                        <input class="form-control" id="city" name="city" value="<?php echo e($supplier['city'] ?? ''); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="state">State</label>
+                                        <input class="form-control" id="state" name="state" value="<?php echo e($supplier['state'] ?? ''); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="postal_code">Postal code</label>
+                                        <input class="form-control" id="postal_code" name="postal_code" value="<?php echo e($supplier['postal_code'] ?? ''); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="country">Country</label>
+                                        <input class="form-control" id="country" name="country" value="<?php echo e($supplier['country'] ?? ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="payment_terms">Payment terms</label>
+                                        <input class="form-control" id="payment_terms" name="payment_terms" value="<?php echo e($supplier['payment_terms'] ?? 'Net 30'); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="default_currency">Currency</label>
+                                        <input class="form-control" id="default_currency" name="default_currency" value="<?php echo e($supplier['default_currency'] ?? 'USD'); ?>">
+                                    </div>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" <?php echo (int) ($supplier['is_active'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="is_active">Active supplier</label>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i><?php echo $supplier !== [] ? 'Update supplier' : 'Create supplier'; ?></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Supplier list</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Supplier</th>
+                                        <th>Contact</th>
+                                        <th class="text-end">Outstanding</th>
+                                        <th class="text-end">POs</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($suppliers === []): ?>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No suppliers yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($suppliers as $s): ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo e($s['name']); ?></div>
+                                            <div class="small text-muted"><?php echo e($s['email'] ?? ''); ?></div>
+                                        </td>
+                                        <td>
+                                            <div><?php echo e($s['contact_name'] ?? '—'); ?></div>
+                                            <div class="small text-muted"><?php echo e($s['phone'] ?? ''); ?></div>
+                                        </td>
+                                        <td class="text-end"><?php echo formatPrice((float) ($s['total_outstanding'] ?? 0)); ?></td>
+                                        <td class="text-end"><?php echo (int) ($s['po_count'] ?? 0); ?></td>
+                                        <td><span class="badge bg-<?php echo (int) ($s['is_active'] ?? 1) === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) ($s['is_active'] ?? 1) === 1 ? 'Active' : 'Inactive'; ?></span></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/ap?action=suppliers&supplier_id=' . (int) $s['vendor_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                            <?php if ((int) ($s['is_active'] ?? 1) === 1): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/ap?action=suppliers')); ?>" data-confirm="Deactivate this supplier?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="deactivate_supplier">
+                                                <input type="hidden" name="supplier_id" value="<?php echo (int) $s['vendor_id']; ?>">
+                                                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="fas fa-power-off"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php elseif ($action === 'purchase_orders'): ?>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 mb-0">Purchase orders</h2>
+                <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/ap?action=purchase_orders')); ?>"><i class="fas fa-plus me-2"></i>New PO</a>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold"><?php echo $po !== [] ? 'Edit PO ' . e($po['po_number']) : 'Create purchase order'; ?></div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/ap?action=purchase_orders')); ?>" id="poForm">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_po">
+                                <input type="hidden" name="po_id" value="<?php echo (int) ($po['purchase_order_id'] ?? 0); ?>">
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="supplier_id">Supplier <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="supplier_id" name="supplier_id" required>
+                                        <option value="">-- Select supplier --</option>
+                                        <?php foreach ($suppliers as $s): ?>
+                                        <option value="<?php echo (int) $s['vendor_id']; ?>" <?php echo (int) ($po['vendor_id'] ?? $supplierId) === (int) $s['vendor_id'] ? 'selected' : ''; ?>><?php echo e($s['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="branch_id">Branch</label>
+                                        <select class="form-select" id="branch_id" name="branch_id">
+                                            <option value="">-- None --</option>
+                                            <?php foreach ($branches as $b): ?>
+                                            <option value="<?php echo (int) $b['branch_id']; ?>" <?php echo (int) ($po['branch_id'] ?? 0) === (int) $b['branch_id'] ? 'selected' : ''; ?>><?php echo e($b['name']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="po_status">Status</label>
+                                        <select class="form-select" id="po_status" name="po_status">
+                                            <?php foreach (['draft' => 'Draft', 'sent' => 'Sent', 'pending' => 'Pending', 'partial_received' => 'Partial received', 'received' => 'Received', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $value => $label): ?>
+                                            <option value="<?php echo e($value); ?>" <?php echo ($po['status'] ?? 'draft') === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="issue_date">Issue date</label>
+                                        <input class="form-control" type="date" id="issue_date" name="issue_date" value="<?php echo e($po['issue_date'] ?? date('Y-m-d')); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="required_date">Required date</label>
+                                        <input class="form-control" type="date" id="required_date" name="required_date" value="<?php echo e($po['required_date'] ?? ''); ?>">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="po_subtotal">Subtotal</label>
+                                        <input class="form-control po-calc" type="number" step="0.0001" id="po_subtotal" name="po_subtotal" value="<?php echo e($po['subtotal'] ?? '0.0000'); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="po_discount_percent">Discount %</label>
+                                        <input class="form-control po-calc" type="number" step="0.01" id="po_discount_percent" name="po_discount_percent" value="<?php echo e($po['discount_percent'] ?? '0.00'); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="po_discount_amount">Discount amount</label>
+                                        <input class="form-control po-calc" type="number" step="0.0001" id="po_discount_amount" name="po_discount_amount" value="<?php echo e($po['discount_amount'] ?? '0.0000'); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="po_tax_rate">Tax rate (decimal)</label>
+                                        <input class="form-control po-calc" type="number" step="0.0001" id="po_tax_rate" name="po_tax_rate" value="<?php echo e($po['tax_rate'] ?? $defaultTaxRate); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="po_tax_amount_display">Tax amount</label>
+                                        <input class="form-control" id="po_tax_amount_display" value="<?php echo e($po['tax_amount'] ?? '0.0000'); ?>" readonly>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="po_total_display">Total</label>
+                                        <input class="form-control" id="po_total_display" value="<?php echo e($po['total_amount'] ?? '0.0000'); ?>" readonly>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="po_notes">Notes</label>
+                                    <textarea class="form-control" id="po_notes" name="po_notes" rows="2"><?php echo e($po['notes'] ?? ''); ?></textarea>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i><?php echo $po !== [] ? 'Update PO' : 'Create PO'; ?></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header fw-semibold">Orders</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr><th>PO</th><th>Supplier</th><th>Status</th><th class="text-end">Total</th><th class="text-end">Outstanding</th><th></th></tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($pos === []): ?>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No purchase orders yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($pos as $row): ?>
+                                    <tr>
+                                        <td>
+                                            <a class="fw-semibold" href="<?php echo e(url('/ap?action=purchase_orders&po_id=' . (int) $row['purchase_order_id'])); ?>"><?php echo e($row['po_number']); ?></a>
+                                            <div class="small text-muted"><?php echo e($row['issue_date']); ?></div>
+                                        </td>
+                                        <td><?php echo e($row['supplier_name'] ?? '—'); ?></td>
+                                        <td><span class="badge bg-secondary"><?php echo e($row['status']); ?></span></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount_owed']); ?></td>
+                                        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/ap?action=purchase_orders&po_id=' . (int) $row['purchase_order_id'])); ?>">Open</a></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <?php if ($po !== []): ?>
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold"><?php echo e($po['po_number']); ?> lines</span>
+                            <span class="badge bg-info">Received qty: <?php echo number_format((float) ($po['total_received'] ?? 0), 2); ?></span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table align-middle mb-0">
+                                <thead><tr><th>Product</th><th class="text-end">Qty</th><th class="text-end">Received</th><th class="text-end">Unit price</th><th class="text-end">Line total</th></tr></thead>
+                                <tbody>
+                                    <?php if ($poLines === []): ?>
+                                    <tr><td colspan="5" class="text-center text-muted py-3">No lines on this order.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($poLines as $line): ?>
+                                    <tr>
+                                        <td><?php echo e($line['product_name'] ?? $line['description']); ?></td>
+                                        <td class="text-end"><?php echo number_format((float) $line['quantity'], 2); ?></td>
+                                        <td class="text-end"><?php echo number_format((float) $line['received_quantity'], 2); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $line['unit_price']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $line['line_total']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="card-body border-top">
+                            <form class="row g-2 align-items-end" method="POST" action="<?php echo e(url('/ap?action=purchase_orders')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="add_po_line">
+                                <input type="hidden" name="po_id" value="<?php echo (int) $po['purchase_order_id']; ?>">
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label" for="product_id">Product</label>
+                                    <select class="form-select" id="product_id" name="product_id" required>
+                                        <option value="">-- Select --</option>
+                                        <?php foreach ($products as $product): ?>
+                                        <option value="<?php echo (int) $product['product_id']; ?>"><?php echo e($product['name'] . ' (' . $product['sku'] . ')'); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label" for="quantity">Qty</label>
+                                    <input class="form-control" type="number" step="0.0001" min="0.0001" id="quantity" name="quantity" value="1">
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label" for="unit_price">Unit price</label>
+                                    <input class="form-control" type="number" step="0.0001" id="unit_price" name="unit_price" value="0.0000">
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label" for="unit_cost">Unit cost</label>
+                                    <input class="form-control" type="number" step="0.0001" id="unit_cost" name="unit_cost" value="0.0000">
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <button class="btn btn-outline-primary w-100" type="submit">Add line</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Record invoice / receipt for <?php echo e($po['po_number']); ?></div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/ap?action=purchase_orders')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="record_ir">
+                                <input type="hidden" name="po_id" value="<?php echo (int) $po['purchase_order_id']; ?>">
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6"><label class="form-label" for="invoice_number">Invoice number <span class="text-danger">*</span></label><input class="form-control" id="invoice_number" name="invoice_number" required></div>
+                                    <div class="col-6"><label class="form-label" for="receipt_number">Receipt number</label><input class="form-control" id="receipt_number" name="receipt_number"></div>
+                                    <div class="col-6"><label class="form-label" for="invoice_date">Invoice date</label><input class="form-control" type="date" id="invoice_date" name="invoice_date" value="<?php echo e(date('Y-m-d')); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="receipt_date">Receipt date</label><input class="form-control" type="date" id="receipt_date" name="receipt_date" value="<?php echo e(date('Y-m-d')); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="invoice_total">Invoice total</label><input class="form-control" type="number" step="0.0001" id="invoice_total" name="invoice_total" value="<?php echo e($po['amount_owed'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="receipt_total">Receipt total</label><input class="form-control" type="number" step="0.0001" id="receipt_total" name="receipt_total" value="<?php echo e($po['amount_owed'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="invoiced_qty">Invoiced qty</label><input class="form-control" type="number" step="0.0001" id="invoiced_qty" name="invoiced_qty" value="0.0000"></div>
+                                    <div class="col-6"><label class="form-label" for="received_qty">Received qty</label><input class="form-control" type="number" step="0.0001" id="received_qty" name="received_qty" value="0.0000"></div>
+                                    <div class="col-12"><label class="form-label" for="ir_notes">Notes</label><textarea class="form-control" id="ir_notes" name="ir_notes" rows="2"></textarea></div>
+                                </div>
+                                <p class="small text-muted">Match status is calculated from the invoice total, receipt total and quantities.</p>
+                                <button class="btn btn-primary" type="submit"><i class="fas fa-save me-2"></i>Record invoice/receipt</button>
+                            </form>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <?php elseif ($action === 'invoices'): ?>
+            <div class="card border-0 shadow-sm">
+                <div class="card-header fw-semibold">Invoice receipts (three-way match)</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr><th>Invoice</th><th>PO</th><th>Supplier</th><th class="text-end">Invoice</th><th class="text-end">Receipt</th><th class="text-end">Due</th><th>Status</th><th>Update</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($invoices === []): ?>
+                            <tr><td colspan="8" class="text-center text-muted py-4">No invoice receipts yet. Record one from a purchase order.</td></tr>
+                            <?php endif; ?>
+                            <?php foreach ($invoices as $ir): ?>
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold"><?php echo e($ir['invoice_number']); ?></div>
+                                    <div class="small text-muted"><?php echo e($ir['invoice_date']); ?></div>
+                                </td>
+                                <td><?php echo e($ir['po_number'] ?? '—'); ?></td>
+                                <td><?php echo e($ir['supplier_name'] ?? '—'); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $ir['invoice_total']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $ir['receipt_total']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $ir['amount_due']); ?></td>
+                                <td>
+                                    <span class="badge bg-<?php echo ['full_match' => 'success', 'partial_match' => 'warning', 'mismatch' => 'danger', 'paid' => 'primary'][$ir['status']] ?? 'secondary'; ?>"><?php echo e($ir['status']); ?></span>
+                                    <?php if ((int) $ir['paid'] === 1): ?><span class="badge bg-primary">Paid</span><?php endif; ?>
+                                </td>
+                                <td>
+                                    <form class="d-flex gap-2 align-items-center" method="POST" action="<?php echo e(url('/ap?action=invoices')); ?>">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="update_ir">
+                                        <input type="hidden" name="ir_id" value="<?php echo (int) $ir['invoice_receipt_id']; ?>">
+                                        <select class="form-select form-select-sm" name="ir_status">
+                                            <?php foreach (['matching' => 'Matching', 'full_match' => 'Full match', 'partial_match' => 'Partial match', 'mismatch' => 'Mismatch', 'paid' => 'Paid'] as $value => $label): ?>
+                                            <option value="<?php echo e($value); ?>" <?php echo $ir['status'] === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="ir_paid" value="1" id="paid_<?php echo (int) $ir['invoice_receipt_id']; ?>" <?php echo (int) $ir['paid'] === 1 ? 'checked' : ''; ?>>
+                                            <label class="form-check-label small" for="paid_<?php echo (int) $ir['invoice_receipt_id']; ?>">Paid</label>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <?php else: ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Record supplier payment</div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/ap?action=payments')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="record_sp_payment">
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_supplier">Supplier <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="payment_supplier" name="supplier_id" required>
+                                        <option value="">-- Select supplier --</option>
+                                        <?php foreach ($suppliers as $s): ?>
+                                        <option value="<?php echo (int) $s['vendor_id']; ?>" <?php echo $supplierId === (int) $s['vendor_id'] ? 'selected' : ''; ?>><?php echo e($s['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_po">Purchase order</label>
+                                    <select class="form-select" id="payment_po" name="purchase_order_id">
+                                        <option value="0">-- None --</option>
+                                        <?php foreach ($pos as $row): ?>
+                                        <option value="<?php echo (int) $row['purchase_order_id']; ?>"><?php echo e($row['po_number'] . ' — ' . ($row['supplier_name'] ?? '')); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_ir">Invoice receipt</label>
+                                    <select class="form-select" id="payment_ir" name="invoice_receipt_id">
+                                        <option value="0">-- None --</option>
+                                        <?php foreach ($invoices as $ir): ?>
+                                        <?php if ((int) $ir['paid'] === 0): ?>
+                                        <option value="<?php echo (int) $ir['invoice_receipt_id']; ?>"><?php echo e($ir['invoice_number'] . ' — ' . formatPrice((float) $ir['amount_due'])); ?></option>
+                                        <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6"><label class="form-label" for="payment_amount">Amount <span class="text-danger">*</span></label><input class="form-control" type="number" step="0.0001" min="0.0001" id="payment_amount" name="payment_amount" required></div>
+                                    <div class="col-6"><label class="form-label" for="payment_date">Date</label><input class="form-control" type="date" id="payment_date" name="payment_date" value="<?php echo e(date('Y-m-d')); ?>"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_method">Method</label>
+                                    <select class="form-select" id="payment_method" name="payment_method">
+                                        <?php foreach (['bank_transfer' => 'Bank transfer', 'check' => 'Check', 'cash' => 'Cash', 'credit_card' => 'Credit card', 'debit_card' => 'Debit card'] as $value => $label): ?>
+                                        <option value="<?php echo e($value); ?>"><?php echo e($label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3"><label class="form-label" for="payment_reference">Reference</label><input class="form-control" id="payment_reference" name="payment_reference"></div>
+                                <div class="mb-3"><label class="form-label" for="payment_notes">Notes</label><textarea class="form-control" id="payment_notes" name="payment_notes" rows="2"></textarea></div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i>Record payment</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header fw-semibold">Payments by method</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Method</th><th class="text-end">Transactions</th><th class="text-end">Total</th></tr></thead>
+                                <tbody>
+                                    <?php if ($supplierPaymentSummary === []): ?>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">No payments recorded.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($supplierPaymentSummary as $summary): ?>
+                                    <tr>
+                                        <td><?php echo e(str_replace('_', ' ', $summary['payment_method'])); ?></td>
+                                        <td class="text-end"><?php echo (int) $summary['transaction_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $summary['total_amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Payment history</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Date</th><th>Supplier</th><th>PO</th><th>Invoice</th><th class="text-end">Amount</th><th>Method</th><th>Reference</th></tr></thead>
+                                <tbody>
+                                    <?php if ($payments === []): ?>
+                                    <tr><td colspan="7" class="text-center text-muted py-4">No payments recorded.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($payments as $payment): ?>
+                                    <tr>
+                                        <td><?php echo e($payment['payment_date']); ?></td>
+                                        <td><?php echo e($payment['supplier_name'] ?? '—'); ?></td>
+                                        <td><?php echo e($payment['po_number'] ?? '—'); ?></td>
+                                        <td><?php echo e($payment['invoice_number'] ?? '—'); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $payment['amount']); ?></td>
+                                        <td><span class="badge bg-secondary"><?php echo e(str_replace('_', ' ', $payment['payment_method'])); ?></span></td>
+                                        <td><?php echo e($payment['reference_number'] ?? ''); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+<?php ob_start(); ?>
+    <script>
+        (function () {
+            const subtotal = document.getElementById('po_subtotal');
+            const discountPercent = document.getElementById('po_discount_percent');
+            const discountAmount = document.getElementById('po_discount_amount');
+            const taxRate = document.getElementById('po_tax_rate');
+            const taxDisplay = document.getElementById('po_tax_amount_display');
+            const totalDisplay = document.getElementById('po_total_display');
+
+            if (!subtotal) {
+                return;
+            }
+
+            function recalc() {
+                const sub = parseFloat(subtotal.value) || 0;
+                let discount = parseFloat(discountAmount.value) || 0;
+                const pct = parseFloat(discountPercent.value) || 0;
+                const rate = parseFloat(taxRate.value) || 0;
+
+                if (discount <= 0 && pct > 0) {
+                    discount = sub * (pct / 100);
+                }
+                const taxable = Math.max(sub - discount, 0);
+                const tax = taxable * rate;
+                const total = taxable + tax;
+
+                taxDisplay.value = tax.toFixed(4);
+                totalDisplay.value = total.toFixed(4);
+            }
+
+            [subtotal, discountPercent, discountAmount, taxRate].forEach(function (input) {
+                input.addEventListener('input', recalc);
+            });
+            recalc();
+        })();
+    </script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

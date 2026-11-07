@@ -1,0 +1,293 @@
+<?php
+$pageHeading = 'Banking';
+$pageEyebrow = 'Cash management';
+$pageDescription = 'Bank accounts, balances and reconciled cash movement across the business.';
+$activeNav = 'bank';
+ob_start();
+?>
+<button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bankFormModal" id="addBankButton">
+    <i class="fas fa-plus me-1"></i> Add Account
+</button>
+<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#transactionModal">
+    <i class="fas fa-money-check-dollar me-1"></i> Record Transaction
+</button>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <?php if (empty($cashSummary)): ?>
+            <div class="alert alert-secondary">No bank accounts yet. Add an account to begin recording transactions.</div>
+            <?php else: ?>
+            <div class="row g-3 mb-4">
+                <?php foreach ($cashSummary as $cs): ?>
+                <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="card text-bg-info h-100">
+                        <div class="card-body">
+                            <h5 class="card-title"><?php echo e($cs['name']); ?></h5>
+                            <p class="card-text mb-1"><strong>Balance:</strong> <?php echo e(formatPrice((float) ($cs['balance'] ?? 0))); ?> <?php echo e($cs['currency'] ?? ''); ?></p>
+                            <p class="card-text mb-0 small">Deposits: <?php echo e(formatPrice((float) ($cs['total_deposits'] ?? 0))); ?></p>
+                            <p class="card-text mb-0 small">Withdrawals: <?php echo e(formatPrice((float) ($cs['total_withdrawals'] ?? 0))); ?></p>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0"><i class="fas fa-folder-open me-2"></i>Bank Accounts</h5>
+                    <span class="badge bg-primary">Total: <?php echo count($banks); ?></span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Bank Name</th>
+                                <th>Account Number</th>
+                                <th>Type</th>
+                                <th>Currency</th>
+                                <th class="text-end">Balance</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($banks)): ?>
+                            <tr><td colspan="8" class="text-center text-muted py-4">No bank accounts found.</td></tr>
+                            <?php endif; ?>
+                            <?php foreach ($banks as $i => $b): ?>
+                            <tr>
+                                <td><?php echo $i + 1; ?></td>
+                                <td><?php echo e($b['name']); ?></td>
+                                <td><?php echo e($b['account_number'] ?? ''); ?></td>
+                                <td><?php echo e(ucfirst($b['account_type'] ?? 'checking')); ?></td>
+                                <td><?php echo e($b['currency'] ?? ''); ?></td>
+                                <td class="text-end"><?php echo e(formatPrice((float) ($b['balance'] ?? 0))); ?></td>
+                                <td><span class="badge bg-<?php echo !empty($b['is_active']) ? 'success' : 'secondary'; ?>"><?php echo !empty($b['is_active']) ? 'Active' : 'Inactive'; ?></span></td>
+                                <td class="text-end text-nowrap">
+                                    <a class="btn btn-sm btn-outline-secondary" title="View"
+                                       href="<?php echo e(url('/bank?action=list&bank_id=' . (int) $b['bank_id'])); ?>">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" title="Edit"
+                                            data-bs-toggle="modal" data-bs-target="#bankFormModal"
+                                            data-bank-id="<?php echo (int) $b['bank_id']; ?>"
+                                            data-bank-name="<?php echo e($b['name']); ?>"
+                                            data-bank-account="<?php echo e($b['account_number'] ?? ''); ?>"
+                                            data-bank-type="<?php echo e($b['account_type'] ?? 'checking'); ?>"
+                                            data-bank-currency="<?php echo e($b['currency'] ?? 'USD'); ?>"
+                                            data-bank-sort="<?php echo (int) ($b['sort_order'] ?? 0); ?>"
+                                            data-bank-active="<?php echo !empty($b['is_active']) ? '1' : '0'; ?>">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                    <?php if (!empty($b['is_active'])): ?>
+                                    <form action="<?php echo e(url('/bank?action=list')); ?>" method="POST" class="d-inline"
+                                          data-confirm="Deactivate this bank account? Existing transactions are preserved.">
+                                        <input type="hidden" name="csrf_token" value="<?php echo e(csrf_token()); ?>">
+                                        <input type="hidden" name="action" value="delete_bank">
+                                        <input type="hidden" name="delete_id" value="<?php echo (int) $b['bank_id']; ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Deactivate">
+                                            <i class="fas fa-power-off"></i>
+                                        </button>
+                                    </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <?php if (!empty($bank)): ?>
+            <div class="card">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list me-2"></i><?php echo e($bank['name']); ?> — Transactions
+                    </h5>
+                    <span class="badge bg-info">Balance: <?php echo e(formatPrice((float) ($bank['balance'] ?? 0))); ?> <?php echo e($bank['currency'] ?? ''); ?></span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Reference</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Balance After</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($transactions)): ?>
+                            <tr><td colspan="7" class="text-center text-muted py-4">No transactions recorded for this account.</td></tr>
+                            <?php endif; ?>
+                            <?php foreach ($transactions as $t): ?>
+                            <tr>
+                                <td><?php echo e($t['transaction_date'] ?? ''); ?></td>
+                                <td><?php echo e(ucfirst($t['transaction_type'] ?? '')); ?></td>
+                                <td><?php echo e($t['description'] ?? ''); ?></td>
+                                <td><?php echo e($t['reference_number'] ?? ''); ?></td>
+                                <td class="text-end"><?php echo e(formatPrice((float) ($t['amount'] ?? 0))); ?></td>
+                                <td class="text-end"><?php echo e(formatPrice((float) ($t['balance_after'] ?? 0))); ?></td>
+                                <td><?php echo e(ucfirst($t['status'] ?? 'completed')); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+
+    <div class="modal fade" id="bankFormModal" tabindex="-1" aria-labelledby="bankFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <form action="<?php echo e(url('/bank?action=list')); ?>" method="POST" class="needs-validation">
+                <input type="hidden" name="csrf_token" value="<?php echo e(csrf_token()); ?>">
+                <input type="hidden" name="action" value="save_bank">
+                <input type="hidden" name="bank_id" id="bankFormId" value="0">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="bankFormModalLabel">Add Bank Account</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="bank_name" class="form-label">Bank name</label>
+                            <input type="text" class="form-control" id="bank_name" name="bank_name" maxlength="80" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="account_number" class="form-label">Account number</label>
+                            <input type="text" class="form-control" id="account_number" name="account_number" maxlength="50">
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-6 mb-3">
+                                <label for="account_type" class="form-label">Account type</label>
+                                <select class="form-select" id="account_type" name="account_type">
+                                    <option value="checking">Checking</option>
+                                    <option value="savings">Savings</option>
+                                    <option value="credit">Credit</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <label for="currency" class="form-label">Currency</label>
+                                <input type="text" class="form-control" id="currency" name="currency" maxlength="3" value="USD">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-6 mb-3">
+                                <label for="opening_balance" class="form-label">Opening balance</label>
+                                <input type="number" step="0.0001" class="form-control" id="opening_balance" name="opening_balance" value="0">
+                                <div class="form-text">Used only when creating an account.</div>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <label for="sort_order" class="form-label">Sort order</label>
+                                <input type="number" class="form-control" id="sort_order" name="sort_order" value="0">
+                            </div>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="bank_active" name="is_active" value="1" checked>
+                            <label class="form-check-label" for="bank_active">Active</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk me-1"></i> Save</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal fade" id="transactionModal" tabindex="-1" aria-labelledby="transactionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <form action="<?php echo e(url('/bank?action=list')); ?>" method="POST" class="needs-validation">
+                <input type="hidden" name="csrf_token" value="<?php echo e(csrf_token()); ?>">
+                <input type="hidden" name="action" value="record_transaction">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="transactionModalLabel">Record Bank Transaction</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="bank_id" class="form-label">Bank account</label>
+                            <select class="form-select" id="bank_id" name="bank_id" required>
+                                <option value="">Choose an account</option>
+                                <?php foreach ($banks as $b): ?>
+                                <option value="<?php echo (int) $b['bank_id']; ?>" <?php echo (int) ($bank['bank_id'] ?? 0) === (int) $b['bank_id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($b['name'] . (!empty($b['account_number']) ? ' — ' . $b['account_number'] : '')); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-6 mb-3">
+                                <label for="transaction_type" class="form-label">Transaction type</label>
+                                <select class="form-select" id="transaction_type" name="transaction_type">
+                                    <option value="deposit">Deposit</option>
+                                    <option value="withdrawal">Withdrawal</option>
+                                    <option value="transfer">Transfer out</option>
+                                    <option value="fee">Bank fee</option>
+                                    <option value="interest">Interest</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <label for="amount" class="form-label">Amount</label>
+                                <input type="number" step="0.0001" min="0.0001" class="form-control" id="amount" name="amount" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-6 mb-3">
+                                <label for="reference_number" class="form-label">Reference number</label>
+                                <input type="text" class="form-control" id="reference_number" name="reference_number" maxlength="50">
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <input type="text" class="form-control" id="description" name="description">
+                            </div>
+                        </div>
+                        <p class="text-muted small mb-0">Deposits and interest increase the balance; withdrawals, transfers and fees reduce it. The new balance is calculated by the server.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk me-1"></i> Record Transaction</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+<?php ob_start(); ?>
+<script>
+    (function () {
+        const modal = document.getElementById('bankFormModal');
+        modal.addEventListener('show.bs.modal', function (event) {
+            const trigger = event.relatedTarget;
+            const editing = trigger && trigger.dataset.bankId;
+
+            document.getElementById('bankFormModalLabel').textContent = editing ? 'Edit Bank Account' : 'Add Bank Account';
+            document.getElementById('bankFormId').value = editing || '0';
+            document.getElementById('bank_name').value = editing ? trigger.dataset.bankName : '';
+            document.getElementById('account_number').value = editing ? trigger.dataset.bankAccount : '';
+            document.getElementById('account_type').value = editing ? trigger.dataset.bankType : 'checking';
+            document.getElementById('currency').value = editing ? trigger.dataset.bankCurrency : 'USD';
+            document.getElementById('sort_order').value = editing ? trigger.dataset.bankSort : '0';
+            document.getElementById('opening_balance').value = '0';
+            document.getElementById('opening_balance').disabled = !!editing;
+            document.getElementById('bank_active').checked = editing ? trigger.dataset.bankActive === '1' : true;
+        });
+    })();
+</script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

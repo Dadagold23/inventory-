@@ -1,0 +1,146 @@
+<?php
+$pageHeading = 'Audit Log';
+$pageEyebrow = 'Accountability';
+$pageDescription = 'Read-only record of sign-ins, administrative changes and data events.';
+$activeNav = 'audit';
+ob_start();
+?>
+<span class="badge bg-secondary align-self-center"><?php echo count($auditLogs); ?> entries shown</span>
+<?php if (!empty($auditLogs[0]['created_at'])): ?>
+<span class="badge bg-info text-dark align-self-center">Latest <?php echo e(date('M d, Y H:i', strtotime($auditLogs[0]['created_at']))); ?></span>
+<?php endif; ?>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header fw-semibold">Filter audit log</div>
+                <div class="card-body">
+                    <form method="GET" action="<?php echo e(url('/audit')); ?>" class="row g-3 align-items-end">
+                        <input type="hidden" name="action" value="list">
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="action_filter">Action</label>
+                            <select class="form-select" id="action_filter" name="action_filter">
+                                <option value="">All actions</option>
+                                <?php foreach (AUDIT_ACTIONS as $auditAction): ?>
+                                <option value="<?php echo e($auditAction); ?>" <?php echo $actionFilter === $auditAction ? 'selected' : ''; ?>><?php echo e(ucfirst(strtolower($auditAction))); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="entity_type_filter">Entity type</label>
+                            <select class="form-select" id="entity_type_filter" name="entity_type_filter">
+                                <option value="">All entity types</option>
+                                <?php foreach ($entityTypes as $entityType): ?>
+                                <option value="<?php echo e($entityType); ?>" <?php echo $entityTypeFilter === $entityType ? 'selected' : ''; ?>><?php echo e($entityType); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="user_filter">User</label>
+                            <select class="form-select" id="user_filter" name="user_filter">
+                                <option value="0">All users</option>
+                                <?php foreach ($auditUsers as $auditUser): ?>
+                                <option value="<?php echo (int) $auditUser['user_id']; ?>" <?php echo $userFilter === (int) $auditUser['user_id'] ? 'selected' : ''; ?>><?php echo e($auditUser['full_name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-filter me-2"></i>Apply</button>
+                            <a class="btn btn-outline-secondary" href="<?php echo e(url('/audit?action=list')); ?>">Clear</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <?php if ($selectedLog !== []): ?>
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="fw-semibold">Audit entry #<?php echo (int) $selectedLog['audit_id']; ?></span>
+                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/audit?action=list')); ?>">Close</a>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-3"><div class="text-muted small">Date</div><div><?php echo e(date('M d, Y H:i:s', strtotime($selectedLog['created_at']))); ?></div></div>
+                        <div class="col-12 col-md-3"><div class="text-muted small">User</div><div><?php echo e($selectedLog['user_name'] ?? ('User #' . (int) $selectedLog['user_id'])); ?></div></div>
+                        <div class="col-12 col-md-3"><div class="text-muted small">Action</div><div><?php echo e($selectedLog['action']); ?></div></div>
+                        <div class="col-12 col-md-3"><div class="text-muted small">Entity</div><div><?php echo e($selectedLog['entity_type']); ?><?php echo $selectedLog['entity_id'] !== null ? ' #' . (int) $selectedLog['entity_id'] : ''; ?></div></div>
+                        <div class="col-12 col-md-3"><div class="text-muted small">IP address</div><div><?php echo e($selectedLog['ip_address'] ?? '—'); ?></div></div>
+                        <div class="col-12 col-md-9"><div class="text-muted small">User agent</div><div class="small text-break"><?php echo e($selectedLog['user_agent'] ?? '—'); ?></div></div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <div class="text-muted small mb-1">Old value</div>
+                            <pre class="bg-light border rounded p-3 mb-0 small text-wrap"><?php echo e($selectedLog['old_value'] ?? '—'); ?></pre>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="text-muted small mb-1">New value</div>
+                            <pre class="bg-light border rounded p-3 mb-0 small text-wrap"><?php echo e($selectedLog['new_value'] ?? '—'); ?></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header fw-semibold">Audit entries</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Date</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Entity</th>
+                                <th>Entity ID</th>
+                                <th>IP address</th>
+                                <th class="text-end">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($auditLogs === []): ?>
+                            <tr><td colspan="8" class="text-center text-muted py-4">No audit entries match the current filters.</td></tr>
+                            <?php endif; ?>
+                            <?php foreach ($auditLogs as $log): ?>
+                            <?php
+                            $badge = match ($log['action']) {
+                                'LOGIN' => 'success',
+                                'LOGOUT' => 'info text-dark',
+                                'CREATE' => 'primary',
+                                'UPDATE' => 'warning text-dark',
+                                'DELETE' => 'danger',
+                                'EXPORT', 'IMPORT' => 'info text-dark',
+                                default => 'secondary',
+                            };
+                            $detailQuery = http_build_query(array_filter([
+                                'action' => 'list',
+                                'action_filter' => $actionFilter,
+                                'entity_type_filter' => $entityTypeFilter,
+                                'user_filter' => $userFilter > 0 ? $userFilter : null,
+                                'log_id' => (int) $log['audit_id'],
+                            ], static fn($value): bool => $value !== null && $value !== '' && $value !== 0));
+                            ?>
+                            <tr>
+                                <td><?php echo (int) $log['audit_id']; ?></td>
+                                <td><?php echo e(date('M d, Y H:i', strtotime($log['created_at']))); ?></td>
+                                <td><?php echo e($log['user_name'] ?? ('User #' . (int) $log['user_id'])); ?></td>
+                                <td><span class="badge bg-<?php echo $badge; ?>"><?php echo e($log['action']); ?></span></td>
+                                <td><?php echo e($log['entity_type']); ?></td>
+                                <td><?php echo $log['entity_id'] !== null ? (int) $log['entity_id'] : '—'; ?></td>
+                                <td><?php echo e($log['ip_address'] ?? '—'); ?></td>
+                                <td class="text-end">
+                                    <?php if ($log['old_value'] !== null || $log['new_value'] !== null): ?>
+                                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/audit?' . $detailQuery)); ?>">View</a>
+                                    <?php else: ?>
+                                    <span class="text-muted small">—</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+<?php require APP_ROOT . '/views/layout/footer.php'; ?>

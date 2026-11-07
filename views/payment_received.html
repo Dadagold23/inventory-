@@ -1,0 +1,181 @@
+<?php
+$pageHeading = 'Payments Received';
+$pageEyebrow = 'Customer receipts';
+$pageDescription = 'Customer receipts, invoice balances and receivables.';
+$activeNav = 'payment_received';
+ob_start();
+?>
+<span class="badge bg-primary align-self-center">Payments: <?php echo count($payments); ?></span>
+<span class="badge bg-success align-self-center">Received: <?php echo formatPrice($totalReceived); ?></span>
+<span class="badge bg-warning align-self-center">Outstanding: <?php echo formatPrice($totalOutstanding); ?></span>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Record payment received</div>
+                        <div class="card-body">
+                            <?php if ($invoices === []): ?>
+                            <div class="alert alert-warning">There are no open invoices to receive payment against.</div>
+                            <?php endif; ?>
+                            <form method="POST" action="<?php echo e(url('/payment_received?action=list')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="record_payment">
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="customer_id">Customer <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="customer_id" name="customer_id" required>
+                                        <option value="">-- Select customer --</option>
+                                        <?php foreach ($customers as $customer): ?>
+                                        <option value="<?php echo (int) $customer['customer_id']; ?>"><?php echo e($customer['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="invoice_id">Invoice <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="invoice_id" name="invoice_id" required>
+                                        <option value="">-- Select invoice --</option>
+                                        <?php foreach ($invoices as $invoice): ?>
+                                        <option value="<?php echo (int) $invoice['invoice_id']; ?>" data-customer="<?php echo (int) $invoice['customer_id']; ?>"><?php echo e($invoice['invoice_number']); ?> &mdash; <?php echo e($invoice['customer_name']); ?> (<?php echo formatPrice((float) $invoice['total_amount'] - (float) $invoice['paid']); ?> due)</option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="amount">Amount <span class="text-danger">*</span></label>
+                                        <input class="form-control" type="number" step="0.0001" min="0.0001" id="amount" name="amount" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="payment_date">Payment date</label>
+                                        <input class="form-control" type="date" id="payment_date" name="payment_date" value="<?php echo e(date('Y-m-d')); ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_method">Payment method</label>
+                                    <select class="form-select" id="payment_method" name="payment_method">
+                                        <?php foreach (['cash' => 'Cash', 'check' => 'Check', 'bank_transfer' => 'Bank transfer', 'credit_card' => 'Credit card'] as $value => $label): ?>
+                                        <option value="<?php echo e($value); ?>"><?php echo e($label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="reference_number">Reference number</label>
+                                    <input class="form-control" id="reference_number" name="reference_number">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="notes">Notes</label>
+                                    <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i>Record payment</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Payments received</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th class="text-end">Amount</th><th>Method</th><th>Reference</th></tr></thead>
+                                <tbody>
+                                    <?php if ($payments === []): ?>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No payments recorded yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($payments as $row): ?>
+                                    <tr>
+                                        <td><?php echo e($row['payment_date']); ?></td>
+                                        <td><?php echo e($row['customer_name'] ?? '—'); ?></td>
+                                        <td><?php echo e($row['invoice_number'] ?? '—'); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount']); ?></td>
+                                        <td><span class="badge bg-secondary"><?php echo e(str_replace('_', ' ', $row['payment_method'])); ?></span></td>
+                                        <td><?php echo e($row['reference_number'] ?? '—'); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-1">
+                <div class="col-12 col-lg-7">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Outstanding receivables</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Customer</th><th class="text-end">Outstanding</th></tr></thead>
+                                <tbody>
+                                    <?php if ($outstanding === []): ?>
+                                    <tr><td colspan="2" class="text-center text-muted py-3">No outstanding receivables.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($outstanding as $row): ?>
+                                    <tr>
+                                        <td><?php echo e($row['customer_name']); ?></td>
+                                        <td class="text-end fw-semibold"><?php echo formatPrice((float) $row['outstanding_amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-5">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Payments by method</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Method</th><th class="text-end">Count</th><th class="text-end">Total</th></tr></thead>
+                                <tbody>
+                                    <?php if ($paymentSummary === []): ?>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">No payments.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($paymentSummary as $row): ?>
+                                    <tr>
+                                        <td><?php echo e(str_replace('_', ' ', $row['payment_method'])); ?></td>
+                                        <td class="text-end"><?php echo (int) $row['transaction_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+<?php ob_start(); ?>
+    <script>
+        (function () {
+            const customer = document.getElementById('customer_id');
+            const invoice = document.getElementById('invoice_id');
+            if (!customer || !invoice) {
+                return;
+            }
+            function filterInvoices() {
+                const customerId = customer.value;
+                Array.from(invoice.options).forEach(function (option) {
+                    if (!option.value) {
+                        return;
+                    }
+                    option.hidden = customerId !== '' && option.dataset.customer !== customerId;
+                });
+                const selected = invoice.options[invoice.selectedIndex];
+                if (selected && selected.hidden) {
+                    invoice.value = '';
+                }
+            }
+            customer.addEventListener('change', filterInvoices);
+            filterInvoices();
+        })();
+    </script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

@@ -1,0 +1,359 @@
+<?php
+$pageHeading = 'Expenses';
+$pageEyebrow = 'Operating spend';
+$pageDescription = 'Categories, expenses, payments and overdue tracking.';
+$activeNav = 'expense';
+ob_start();
+?>
+<span class="badge bg-primary align-self-center">Total: <?php echo formatPrice($totalExpenses); ?></span>
+<span class="badge bg-warning align-self-center">Unpaid: <?php echo formatPrice($totalUnpaid); ?></span>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'categories' ? 'active' : ''; ?>" href="<?php echo e(url('/expense?action=categories')); ?>">Categories</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'expenses' ? 'active' : ''; ?>" href="<?php echo e(url('/expense?action=expenses')); ?>">Expenses</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $action === 'summary' ? 'active' : ''; ?>" href="<?php echo e(url('/expense?action=summary')); ?>">Summary</a></li>
+            </ul>
+
+            <?php if ($action === 'categories'): ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold"><?php echo $category !== [] ? 'Edit category' : 'Add category'; ?></span>
+                            <?php if ($category !== []): ?><a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/expense?action=categories')); ?>">New</a><?php endif; ?>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/expense?action=categories')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_category">
+                                <input type="hidden" name="category_id" value="<?php echo (int) ($category['category_id'] ?? 0); ?>">
+                                <div class="mb-3">
+                                    <label class="form-label" for="category_name">Name <span class="text-danger">*</span></label>
+                                    <input class="form-control" id="category_name" name="category_name" required value="<?php echo e($category['name'] ?? ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="category_code">Code</label>
+                                    <input class="form-control" id="category_code" name="category_code" value="<?php echo e($category['code'] ?? ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="category_description">Description</label>
+                                    <textarea class="form-control" id="category_description" name="category_description" rows="2"><?php echo e($category['description'] ?? ''); ?></textarea>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="category_active" name="is_active" value="1" <?php echo (int) ($category['is_active'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="category_active">Active</label>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i><?php echo $category !== [] ? 'Update category' : 'Create category'; ?></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Categories</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Name</th><th>Code</th><th class="text-end">Expenses</th><th class="text-end">Total</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+                                <tbody>
+                                    <?php if ($categories === []): ?>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No categories yet. Add one to start recording expenses.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($categories as $row): ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo e($row['name']); ?></div>
+                                            <div class="small text-muted"><?php echo e($row['description'] ?? ''); ?></div>
+                                        </td>
+                                        <td><?php echo e($row['code'] ?? '—'); ?></td>
+                                        <td class="text-end"><?php echo (int) $row['expense_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total']); ?></td>
+                                        <td><span class="badge bg-<?php echo (int) $row['is_active'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $row['is_active'] === 1 ? 'Active' : 'Inactive'; ?></span></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/expense?action=categories&edit_category=' . (int) $row['category_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                            <?php if ((int) $row['is_active'] === 1): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/expense?action=categories')); ?>" data-confirm="Deactivate this category?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="deactivate_category">
+                                                <input type="hidden" name="category_id" value="<?php echo (int) $row['category_id']; ?>">
+                                                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="fas fa-power-off"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php elseif ($action === 'expenses'): ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold"><?php echo $expense !== [] ? 'Edit expense' : 'Record expense'; ?></span>
+                            <?php if ($expense !== []): ?><a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/expense?action=expenses')); ?>">New</a><?php endif; ?>
+                        </div>
+                        <div class="card-body">
+                            <?php if ($categories === []): ?>
+                            <div class="alert alert-warning">Create an expense category first.</div>
+                            <?php endif; ?>
+                            <form method="POST" action="<?php echo e(url('/expense?action=expenses')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_expense">
+                                <input type="hidden" name="expense_id" value="<?php echo (int) ($expense['expense_id'] ?? 0); ?>">
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="category_id">Category <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="category_id" name="category_id" required>
+                                        <option value="">-- Select category --</option>
+                                        <?php foreach ($categories as $row): ?>
+                                        <?php if ((int) $row['is_active'] === 1 || (int) ($expense['category_id'] ?? 0) === (int) $row['category_id']): ?>
+                                        <option value="<?php echo (int) $row['category_id']; ?>" <?php echo (int) ($expense['category_id'] ?? 0) === (int) $row['category_id'] ? 'selected' : ''; ?>><?php echo e($row['name']); ?></option>
+                                        <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="supplier_id">Supplier</label>
+                                        <select class="form-select" id="supplier_id" name="supplier_id">
+                                            <option value="">-- None --</option>
+                                            <?php foreach ($suppliers as $supplier): ?>
+                                            <option value="<?php echo (int) $supplier['vendor_id']; ?>" <?php echo (int) ($expense['vendor_id'] ?? 0) === (int) $supplier['vendor_id'] ? 'selected' : ''; ?>><?php echo e($supplier['name']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="employee_id">Employee</label>
+                                        <select class="form-select" id="employee_id" name="employee_id">
+                                            <option value="">-- None --</option>
+                                            <?php foreach ($employees as $employee): ?>
+                                            <option value="<?php echo (int) $employee['employee_id']; ?>" <?php echo (int) ($expense['employee_id'] ?? 0) === (int) $employee['employee_id'] ? 'selected' : ''; ?>><?php echo e($employee['display_name']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="expense_date">Date</label>
+                                        <input class="form-control" type="date" id="expense_date" name="expense_date" value="<?php echo e($expense['expense_date'] ?? date('Y-m-d')); ?>">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="expense_number">Expense number</label>
+                                        <input class="form-control" id="expense_number" name="expense_number" value="<?php echo e($expense['expense_number'] ?? ''); ?>" placeholder="Auto-generated">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="description">Description <span class="text-danger">*</span></label>
+                                    <textarea class="form-control" id="description" name="description" rows="2" required><?php echo e($expense['description'] ?? ''); ?></textarea>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-4"><label class="form-label" for="amount">Amount</label><input class="form-control expense-calc" type="number" step="0.0001" min="0" id="amount" name="amount" value="<?php echo e($expense['amount'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-4"><label class="form-label" for="tax_amount">Tax</label><input class="form-control expense-calc" type="number" step="0.0001" min="0" id="tax_amount" name="tax_amount" value="<?php echo e($expense['tax_amount'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-4"><label class="form-label" for="total_display">Total</label><input class="form-control" id="total_display" value="<?php echo e($expense['total_amount'] ?? '0.0000'); ?>" readonly></div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="receipt_status">Receipt status</label>
+                                        <select class="form-select" id="receipt_status" name="receipt_status">
+                                            <?php foreach (['none' => 'None', 'pending' => 'Pending', 'receipt' => 'Receipt', 'approved' => 'Approved'] as $value => $label): ?>
+                                            <option value="<?php echo e($value); ?>" <?php echo ($expense['receipt_status'] ?? 'none') === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="payment_status">Payment status</label>
+                                        <select class="form-select" id="payment_status" name="payment_status">
+                                            <?php foreach (['pending' => 'Pending', 'partial' => 'Partial', 'paid' => 'Paid', 'cancelled' => 'Cancelled'] as $value => $label): ?>
+                                            <option value="<?php echo e($value); ?>" <?php echo ($expense['payment_status'] ?? 'pending') === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payment_date">Payment date</label>
+                                    <input class="form-control" type="date" id="payment_date" name="payment_date" value="<?php echo e($expense['payment_date'] ?? ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="notes">Notes</label>
+                                    <textarea class="form-control" id="notes" name="notes" rows="2"><?php echo e($expense['notes'] ?? ''); ?></textarea>
+                                </div>
+                                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-save me-2"></i><?php echo $expense !== [] ? 'Update expense' : 'Record expense'; ?></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Expenses</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Expense</th><th>Category</th><th>Supplier</th><th>Date</th><th class="text-end">Total</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+                                <tbody>
+                                    <?php if ($expenses === []): ?>
+                                    <tr><td colspan="7" class="text-center text-muted py-4">No expenses recorded yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($expenses as $row): ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo e($row['expense_number']); ?></div>
+                                            <div class="small text-muted"><?php echo e(mb_strimwidth((string) $row['description'], 0, 48, '...')); ?></div>
+                                        </td>
+                                        <td><?php echo e($row['category_name'] ?? '—'); ?></td>
+                                        <td><?php echo e($row['supplier_name'] ?? '—'); ?></td>
+                                        <td><?php echo e($row['expense_date']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td><span class="badge bg-<?php echo ['paid' => 'success', 'partial' => 'warning', 'cancelled' => 'danger'][$row['payment_status']] ?? 'secondary'; ?>"><?php echo e($row['payment_status']); ?></span></td>
+                                        <td class="text-end text-nowrap">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/expense?action=expenses&expense_id=' . (int) $row['expense_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                            <?php if (!in_array($row['payment_status'], ['paid', 'cancelled'], true)): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/expense?action=expenses')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="record_payment">
+                                                <input type="hidden" name="expense_id" value="<?php echo (int) $row['expense_id']; ?>">
+                                                <input type="hidden" name="payment_status" value="paid">
+                                                <button class="btn btn-sm btn-outline-success" type="submit" title="Mark paid"><i class="fas fa-money-bill-wave"></i></button>
+                                            </form>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/expense?action=expenses')); ?>" data-confirm="Cancel this expense?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="cancel_expense">
+                                                <input type="hidden" name="expense_id" value="<?php echo (int) $row['expense_id']; ?>">
+                                                <button class="btn btn-sm btn-outline-danger" type="submit" title="Cancel"><i class="fas fa-times"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php else: ?>
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-md-4">
+                    <div class="card text-white bg-primary border-0 shadow-sm"><div class="card-body">
+                        <div class="small text-uppercase">Total expenses</div>
+                        <div class="fs-4 fw-semibold"><?php echo formatPrice($totalExpenses); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card text-white bg-warning border-0 shadow-sm"><div class="card-body">
+                        <div class="small text-uppercase">Unpaid</div>
+                        <div class="fs-4 fw-semibold"><?php echo formatPrice($totalUnpaid); ?></div>
+                    </div></div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card text-white bg-danger border-0 shadow-sm"><div class="card-body">
+                        <div class="small text-uppercase">Overdue items</div>
+                        <div class="fs-4 fw-semibold"><?php echo count($overdueExpenses); ?></div>
+                    </div></div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Summary by category</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Category</th><th class="text-end">Expenses</th><th class="text-end">Total</th></tr></thead>
+                                <tbody>
+                                    <?php if ($expenseSummary === []): ?>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">No categories.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($expenseSummary as $row): ?>
+                                    <tr>
+                                        <td><?php echo e($row['category_name']); ?></td>
+                                        <td class="text-end"><?php echo (int) $row['expense_count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Summary by payment status</div>
+                        <div class="table-responsive">
+                            <table class="table mb-0">
+                                <thead><tr><th>Status</th><th class="text-end">Count</th><th class="text-end">Total</th></tr></thead>
+                                <tbody>
+                                    <?php if ($paymentSummary === []): ?>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">No expenses.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($paymentSummary as $row): ?>
+                                    <tr>
+                                        <td><span class="badge bg-secondary"><?php echo e($row['payment_status']); ?></span></td>
+                                        <td class="text-end"><?php echo (int) $row['count']; ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total']); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header fw-semibold">Overdue expenses (older than <?php echo (int) expenseOverdueDays(); ?> days)</div>
+                <div class="table-responsive">
+                    <table class="table mb-0">
+                        <thead><tr><th>Expense</th><th>Date</th><th>Supplier</th><th class="text-end">Total</th><th class="text-end">Days overdue</th></tr></thead>
+                        <tbody>
+                            <?php if ($overdueExpenses === []): ?>
+                            <tr><td colspan="5" class="text-center text-muted py-3">Nothing overdue.</td></tr>
+                            <?php endif; ?>
+                            <?php foreach ($overdueExpenses as $row): ?>
+                            <tr>
+                                <td><?php echo e($row['expense_number']); ?></td>
+                                <td><?php echo e($row['expense_date']); ?></td>
+                                <td><?php echo e($row['supplier_name'] ?? '—'); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                <td class="text-end"><?php echo (int) $row['days_overdue']; ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+<?php ob_start(); ?>
+    <script>
+        (function () {
+            const amount = document.getElementById('amount');
+            const tax = document.getElementById('tax_amount');
+            const total = document.getElementById('total_display');
+            if (!amount || !tax || !total) {
+                return;
+            }
+            function recalc() {
+                const base = parseFloat(amount.value) || 0;
+                const taxValue = parseFloat(tax.value) || 0;
+                total.value = (base + taxValue).toFixed(4);
+            }
+            amount.addEventListener('input', recalc);
+            tax.addEventListener('input', recalc);
+            recalc();
+        })();
+    </script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

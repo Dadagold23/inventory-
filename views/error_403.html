@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Access denied &middot; <?= e(APP_NAME) ?></title>
+    <style>
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: #0b0d0a;
+            color: #e8efe2;
+            font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+        }
+        main {
+            width: 100%;
+            max-width: 460px;
+            padding: 40px 36px;
+            border: 1px solid rgba(198, 255, 61, 0.22);
+            border-radius: 18px;
+            background: #121610;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+        .code {
+            font-family: "JetBrains Mono", Consolas, monospace;
+            font-size: 12px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #c6ff3d;
+        }
+        h1 { margin: 12px 0 12px; font-size: 28px; line-height: 1.15; }
+        p { margin: 0 0 24px; color: #a9b5a2; line-height: 1.6; }
+        a {
+            display: inline-block;
+            padding: 12px 18px;
+            border-radius: 10px;
+            background: #c6ff3d;
+            color: #0b0d0a;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        a:focus-visible { outline: 2px solid #e8efe2; outline-offset: 3px; }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="code">403 &middot; Forbidden</div>
+        <h1>Access denied</h1>
+        <p>Your account does not have permission to open this page or perform this action. Contact an administrator if you believe you should have access.</p>
+        <a href="<?= e(url('/dashboard')) ?>">Back to dashboard</a>
+    </main>
+</body>
+</html>

@@ -1,0 +1,1155 @@
+<?php
+$displayName = trim((string) ($user['full_name'] ?? $user['username'] ?? 'User'));
+if ($displayName === '') {
+    $displayName = 'User';
+}
+$initials = '';
+foreach (preg_split('/\s+/', $displayName) as $namePart) {
+    if ($namePart === '') {
+        continue;
+    }
+    $initials .= strtoupper(substr($namePart, 0, 1));
+    if (strlen($initials) >= 2) {
+        break;
+    }
+}
+$initials = $initials !== '' ? $initials : 'U';
+$today = new DateTimeImmutable('now');
+?>
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark" class="dash-root">
+<head>
+    <script>
+        /* The dashboard always shows its own loader; clear any navigation flag
+           so it cannot trigger a loader on the next unrelated page load. */
+        try { sessionStorage.removeItem('inv:navLoader'); } catch (e) {}
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo e($pageTitle ?? 'Dashboard'); ?> - <?php echo e(APP_NAME); ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
+          integrity="sha384-4LISF5TTJX/fLmGSxO53rV4miRxdg84mZsxmO8Rx5jGtp/LbrixFETvWa5a6sESd" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css"
+          integrity="sha384-/rJKQnzOkEo+daG0jMjU1IwwY9unxt1NBw3Ef2fmOJ3PW/TfAg2KXVoWwMZQZtw9" crossorigin="anonymous">
+    <link rel="stylesheet" href="<?php echo e(asset('vendor/sweetalert2/sweetalert2.min.css')); ?>">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+            integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
+    <style>
+        :root {
+            --lime: #C8E932;
+            --lime-bright: #d4f53d;
+            --lime-dim: rgba(200, 233, 50, 0.08);
+            --lime-glow: rgba(200, 233, 50, 0.18);
+            --dark: #06080c;
+            --dark-2: #0c0f16;
+            --dark-3: #13181f;
+            --dark-4: #1a2030;
+            --dark-5: #212840;
+            --text: #ffffff;
+            --text-2: rgba(255, 255, 255, 0.58);
+            --text-3: rgba(255, 255, 255, 0.32);
+            --border: rgba(255, 255, 255, 0.065);
+            --border-2: rgba(255, 255, 255, 0.1);
+            --border-lime: rgba(200, 233, 50, 0.24);
+            --blue: #4b8fff;
+            --orange: #ff9c4b;
+            --red: #ff4b4b;
+            --cyan: #7ecec6;
+            --sidebar-w: 274px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--dark);
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            overflow-x: hidden;
+        }
+
+        a { color: inherit; }
+        ::selection { background: var(--lime); color: #06080c; }
+        *:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+
+        /* ── Background ───────────────────────────── */
+        #bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+        .noise {
+            position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.025;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-size: 128px 128px;
+        }
+        .grid {
+            position: fixed; inset: 0; z-index: 1; pointer-events: none;
+            background-image:
+                linear-gradient(rgba(200, 233, 50, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(200, 233, 50, 0.02) 1px, transparent 1px);
+            background-size: 64px 64px;
+        }
+
+        /* ── Loader ───────────────────────────────── */
+        #loader {
+            position: fixed; inset: 0; z-index: 9999; background: var(--dark);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+            transition: opacity 0.5s ease, visibility 0.5s;
+            animation: loaderFallback 0.5s ease 1.2s forwards;
+        }
+        #loader.out { opacity: 0; visibility: hidden; pointer-events: none; animation: none; }
+        html.loader-hold #loader { animation: none; }
+        @keyframes loaderFallback { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+        .ld-name {
+            font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: 6px;
+            color: var(--lime); text-align: center; max-width: 80vw;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            animation: ldGlow 1.8s ease-in-out infinite alternate;
+        }
+        @keyframes ldGlow {
+            from { text-shadow: 0 0 16px rgba(200, 233, 50, 0.18); }
+            to { text-shadow: 0 0 70px rgba(200, 233, 50, 0.75); }
+        }
+        .ld-spinner { position: relative; width: 60px; height: 60px; }
+        .ld-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; }
+        .ld-ring:nth-child(1) { border-top-color: var(--lime); border-right-color: var(--lime); animation: spin 1.1s linear infinite; }
+        .ld-ring:nth-child(2) { inset: 9px; border-bottom-color: rgba(200, 233, 50, 0.35); border-left-color: rgba(200, 233, 50, 0.35); animation: spin 0.8s linear infinite reverse; }
+        .ld-ring:nth-child(3) { inset: 19px; border-top-color: rgba(200, 233, 50, 0.15); animation: spin 0.55s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .ld-progress { width: 200px; height: 1px; background: var(--dark-4); overflow: hidden; position: relative; }
+        .ld-fill { height: 100%; width: 0; background: var(--lime); animation: ldFill 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes ldFill { to { width: 100%; } }
+        .ld-msg {
+            font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 3px;
+            color: var(--text-3); text-transform: uppercase;
+        }
+
+        /* ── Sidebar ──────────────────────────────── */
+        .sidebar {
+            position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 450;
+            display: flex; flex-direction: column;
+            background: linear-gradient(180deg, rgba(13, 17, 24, 0.97), rgba(6, 8, 12, 0.99));
+            border-right: 1px solid var(--border);
+            backdrop-filter: blur(22px);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .sidebar-head {
+            display: flex; align-items: center; gap: 12px;
+            padding: 22px 18px 20px; border-bottom: 1px solid var(--border);
+        }
+        .brand {
+            display: flex; align-items: center; gap: 12px; min-width: 0;
+            text-decoration: none; color: inherit;
+        }
+        .brand-mark {
+            width: 42px; height: 42px; flex-shrink: 0; border-radius: 11px;
+            background: var(--lime); color: #06080c;
+            display: grid; place-items: center; font-size: 20px;
+            box-shadow: 0 0 32px rgba(200, 233, 50, 0.25);
+        }
+        .brand-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .brand-name {
+            font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 1.6px;
+            color: var(--lime); line-height: 1;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            max-width: 165px;
+        }
+        .brand-sub {
+            font-family: 'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 2px;
+            color: var(--text-3); text-transform: uppercase;
+        }
+        .sidebar-close {
+            display: none; margin-left: auto; background: transparent; border: 1px solid var(--border);
+            color: var(--text-2); width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+        }
+        .sidebar-close:hover { color: var(--text); border-color: var(--border-2); }
+
+        .side-nav { flex: 1; overflow-y: auto; padding: 12px 12px 20px; }
+        .side-nav::-webkit-scrollbar { width: 4px; }
+        .side-nav::-webkit-scrollbar-thumb { background: var(--dark-5); border-radius: 4px; }
+        .side-label {
+            font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 2.4px;
+            color: var(--text-3); text-transform: uppercase; margin: 20px 12px 8px;
+        }
+        .side-label:first-child { margin-top: 8px; }
+        .side-link {
+            display: flex; align-items: center; gap: 12px;
+            padding: 9px 12px; margin-bottom: 2px; border-radius: 9px;
+            color: var(--text-2); font-size: 13px; text-decoration: none;
+            border: 1px solid transparent;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+        .side-link i { font-size: 15px; width: 18px; text-align: center; color: var(--text-3); transition: color 0.2s; }
+        .side-link:hover { background: rgba(255, 255, 255, 0.035); color: var(--text); }
+        .side-link:hover i { color: var(--text-2); }
+        .side-link.active {
+            background: var(--lime-dim); border-color: var(--border-lime);
+            color: var(--lime); font-weight: 500;
+        }
+        .side-link.active i { color: var(--lime); }
+
+        .sidebar-user {
+            margin: 0 12px 10px; padding: 12px;
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid var(--border); border-radius: 12px;
+        }
+        .avatar {
+            width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%;
+            background: var(--lime-dim); border: 1px solid var(--border-lime);
+            color: var(--lime); display: grid; place-items: center;
+            font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 1px;
+        }
+        .u-meta { min-width: 0; flex: 1; }
+        .u-name {
+            font-size: 12.5px; font-weight: 600; line-height: 1.2;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 128px;
+        }
+        .u-role {
+            font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1.6px;
+            color: var(--text-3); text-transform: uppercase; margin-top: 3px;
+        }
+        .u-pass {
+            color: var(--text-3); font-size: 14px; padding: 4px;
+            transition: color 0.2s;
+        }
+        .u-pass:hover { color: var(--lime); }
+
+        .signout { padding: 0 12px 16px; }
+        .signout button {
+            width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+            background: transparent; border: 1px solid var(--border); color: var(--text-2);
+            padding: 10px; border-radius: 9px; font-family: inherit; font-size: 11px;
+            letter-spacing: 0.6px; cursor: pointer; transition: all 0.2s;
+        }
+        .signout button:hover {
+            border-color: rgba(255, 75, 75, 0.4); color: #ff8a8a;
+            background: rgba(255, 75, 75, 0.06);
+        }
+
+        .sidebar-backdrop {
+            position: fixed; inset: 0; z-index: 400;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px);
+            opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s;
+        }
+        .sidebar-backdrop.show { opacity: 1; visibility: visible; }
+
+        /* ── Main ─────────────────────────────────── */
+        .app-main {
+            position: relative; z-index: 10; margin-left: var(--sidebar-w);
+            min-height: 100vh; display: flex; flex-direction: column;
+        }
+        .topbar {
+            position: sticky; top: 0; z-index: 120;
+            display: flex; align-items: center; gap: 14px;
+            padding: 16px 32px;
+            background: rgba(6, 8, 12, 0.62);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(20px) saturate(150%);
+        }
+        .menu-btn {
+            display: none; align-items: center; justify-content: center;
+            width: 38px; height: 38px; border-radius: 9px;
+            background: var(--dark-3); border: 1px solid var(--border);
+            color: var(--text); font-size: 19px; cursor: pointer;
+        }
+        .menu-btn:hover { border-color: var(--border-lime); color: var(--lime); }
+        .topbar-crumb {
+            display: flex; align-items: center; gap: 9px;
+            font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+            letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-3);
+        }
+        .topbar-crumb i { font-size: 8px; }
+        .topbar-crumb strong { color: var(--text-2); font-weight: 500; }
+        .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 20px; }
+        .topbar-status {
+            display: inline-flex; align-items: center; gap: 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 9px;
+            letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-3);
+        }
+        .topbar-status .dot {
+            width: 6px; height: 6px; border-radius: 50%; background: var(--lime);
+            animation: blink 1.6s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+        .topbar-user {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-size: 12.5px; color: var(--text-2);
+        }
+        .topbar-user i { color: var(--lime); font-size: 16px; }
+
+        .content { flex: 1; width: 100%; max-width: 1520px; margin: 0 auto; padding: 34px 32px 26px; }
+
+        .page-head {
+            display: flex; justify-content: space-between; align-items: flex-end; gap: 28px;
+            margin-bottom: 30px;
+        }
+        .eyebrow {
+            display: inline-flex; align-items: center; gap: 10px;
+            font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+            letter-spacing: 3px; text-transform: uppercase; color: var(--lime);
+            margin-bottom: 12px;
+        }
+        .eyebrow::before { content: ''; width: 22px; height: 1px; background: var(--lime); }
+        .page-head h1 {
+            font-family: 'Bebas Neue', sans-serif; line-height: 0.88;
+            font-size: clamp(48px, 5.5vw, 78px); letter-spacing: 2px;
+            margin: 0 0 10px;
+        }
+        .page-head p { margin: 0; color: var(--text-2); font-size: 14.5px; font-weight: 300; max-width: 620px; }
+        .page-head p strong { color: var(--text); font-weight: 500; }
+        .head-date {
+            display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+            padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px;
+            background: rgba(12, 15, 22, 0.7);
+        }
+        .hd-day {
+            font-family: 'Bebas Neue', sans-serif; font-size: 34px; line-height: 0.9;
+            color: var(--lime); letter-spacing: 1px;
+        }
+        .hd-meta { display: flex; flex-direction: column; gap: 3px; }
+        .hd-meta b {
+            font-family: 'JetBrains Mono', monospace; font-size: 9px;
+            letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-2); font-weight: 500;
+        }
+        .hd-meta span { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-3); }
+
+        /* ── Cards ────────────────────────────────── */
+        .stat-card {
+            height: 100%; padding: 20px 22px 18px; position: relative; overflow: hidden;
+            background: linear-gradient(160deg, rgba(19, 24, 31, 0.94), rgba(11, 14, 20, 0.9));
+            border: 1px solid var(--border); border-radius: 16px;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s, box-shadow 0.35s;
+        }
+        .stat-card::after {
+            content: ''; position: absolute; inset: 0; pointer-events: none;
+            background: linear-gradient(135deg, rgba(200, 233, 50, 0.05), transparent 58%);
+            opacity: 0; transition: opacity 0.35s;
+        }
+        .stat-card:hover {
+            transform: translateY(-4px); border-color: var(--border-lime);
+            box-shadow: 0 22px 60px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(200, 233, 50, 0.08);
+        }
+        .stat-card:hover::after { opacity: 1; }
+        .stat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+        .stat-icon {
+            width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center;
+            font-size: 18px; background: var(--lime-dim); color: var(--lime);
+            border: 1px solid rgba(200, 233, 50, 0.14);
+        }
+        .stat-icon.blue { background: rgba(75, 143, 255, 0.09); color: var(--blue); border-color: rgba(75, 143, 255, 0.18); }
+        .stat-icon.orange { background: rgba(255, 156, 75, 0.09); color: var(--orange); border-color: rgba(255, 156, 75, 0.18); }
+        .stat-icon.cyan { background: rgba(126, 206, 198, 0.09); color: var(--cyan); border-color: rgba(126, 206, 198, 0.18); }
+        .stat-tag {
+            font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1.6px;
+            text-transform: uppercase; color: var(--text-3);
+        }
+        .stat-label {
+            font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.7px;
+            text-transform: uppercase; color: var(--text-3); margin-bottom: 7px;
+        }
+        .stat-value {
+            font-family: 'Bebas Neue', sans-serif; font-size: clamp(30px, 2.7vw, 40px);
+            letter-spacing: 1px; line-height: 1; color: var(--text);
+            overflow-wrap: anywhere;
+        }
+        .stat-foot {
+            margin-top: 10px; font-family: 'JetBrains Mono', monospace;
+            font-size: 8.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-3);
+        }
+
+        .mini-card {
+            height: 100%; padding: 17px 19px;
+            display: flex; align-items: center; justify-content: space-between; gap: 14px;
+            background: rgba(12, 15, 22, 0.82); border: 1px solid var(--border); border-radius: 13px;
+            transition: border-color 0.25s, transform 0.25s;
+        }
+        .mini-card:hover { border-color: var(--border-2); transform: translateY(-2px); }
+        .mini-label {
+            font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 1.5px;
+            text-transform: uppercase; color: var(--text-3);
+        }
+        .mini-value {
+            font-family: 'Bebas Neue', sans-serif; font-size: 25px; letter-spacing: 0.8px;
+            line-height: 1; margin-top: 6px; color: var(--text); overflow-wrap: anywhere;
+        }
+        .mini-value.warn { color: var(--orange); }
+        .mini-ico { font-size: 17px; color: var(--text-3); flex-shrink: 0; }
+        .mini-ico.lime { color: var(--lime); }
+        .mini-ico.blue { color: var(--blue); }
+        .mini-ico.orange { color: var(--orange); }
+        .mini-ico.cyan { color: var(--cyan); }
+
+        /* ── Panels ───────────────────────────────── */
+        .panel {
+            height: 100%; display: flex; flex-direction: column; overflow: hidden;
+            background: rgba(12, 15, 22, 0.86);
+            border: 1px solid var(--border); border-radius: 16px;
+            backdrop-filter: blur(10px);
+        }
+        .panel-head {
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
+            padding: 18px 22px; border-bottom: 1px solid var(--border);
+        }
+        .panel-head h2 {
+            font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 1.2px;
+            margin: 0; line-height: 1;
+        }
+        .panel-head p {
+            margin: 4px 0 0; font-family: 'JetBrains Mono', monospace;
+            font-size: 8.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-3);
+        }
+        .panel-badge {
+            font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1.4px;
+            text-transform: uppercase; color: var(--lime);
+            background: var(--lime-dim); border: 1px solid var(--border-lime);
+            padding: 5px 9px; border-radius: 5px; white-space: nowrap;
+        }
+        .panel-link {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 1.2px;
+            text-transform: uppercase; text-decoration: none; color: var(--lime);
+            background: var(--lime-dim); border: 1px solid var(--border-lime);
+            padding: 6px 10px; border-radius: 5px; white-space: nowrap;
+            transition: background 0.2s, color 0.2s;
+        }
+        .panel-link:hover { background: var(--lime); color: #06080c; }
+
+        .chart-wrap { position: relative; padding: 16px 18px 14px; height: 318px; }
+        .chart-wrap canvas { width: 100% !important; height: 100% !important; }
+        .chart-empty {
+            position: absolute; inset: 0; display: grid; place-items: center;
+            font-size: 12.5px; color: var(--text-3); pointer-events: none;
+        }
+
+        /* ── Tables ───────────────────────────────── */
+        .table {
+            --bs-table-bg: transparent;
+            --bs-table-color: var(--text-2);
+            --bs-table-border-color: var(--border);
+            --bs-table-hover-bg: rgba(255, 255, 255, 0.03);
+            --bs-table-hover-color: var(--text);
+            margin: 0; font-size: 12.5px; vertical-align: middle;
+        }
+        .table thead th {
+            font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 500;
+            letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-3);
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--border);
+            padding: 11px 22px; white-space: nowrap;
+        }
+        .table tbody td { padding: 13px 22px; border-color: var(--border); }
+        .table tbody tr:last-child td { border-bottom: 0; }
+        .table .item-name { color: var(--text); font-weight: 500; }
+        .table .item-sub {
+            font-family: 'JetBrains Mono', monospace; font-size: 8.5px;
+            letter-spacing: 0.8px; color: var(--text-3); margin-top: 3px;
+        }
+        .num { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text); white-space: nowrap; }
+        .empty-cell { text-align: center !important; color: var(--text-3) !important; padding: 36px 20px !important; font-size: 12px; }
+        .empty-cell i { display: block; font-size: 22px; margin-bottom: 8px; color: var(--text-3); }
+
+        .status {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px;
+            text-transform: uppercase; padding: 4px 8px; border-radius: 4px;
+            border: 1px solid var(--border); background: rgba(255, 255, 255, 0.035);
+            color: var(--text-2); white-space: nowrap;
+        }
+        .status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+        .status.paid { color: var(--lime); border-color: var(--border-lime); background: var(--lime-dim); }
+        .status.partial { color: var(--orange); border-color: rgba(255, 156, 75, 0.28); background: rgba(255, 156, 75, 0.07); }
+        .status.pending { color: var(--text-2); }
+        .status.cancelled, .status.overdue { color: #ff8a8a; border-color: rgba(255, 75, 75, 0.3); background: rgba(255, 75, 75, 0.07); }
+
+        .dash-foot {
+            display: flex; justify-content: space-between; align-items: center; gap: 18px;
+            flex-wrap: wrap; padding: 20px 32px 26px;
+            font-family: 'JetBrains Mono', monospace; font-size: 8.5px;
+            letter-spacing: 1.1px; text-transform: uppercase; color: var(--text-3);
+        }
+
+        /* ── Responsive ───────────────────────────── */
+        @media (max-width: 1399.98px) {
+            .content { padding: 28px 26px 22px; }
+            .topbar { padding: 14px 26px; }
+        }
+        @media (max-width: 991.98px) {
+            .sidebar { transform: translateX(-100%); box-shadow: 30px 0 80px rgba(0, 0, 0, 0.6); }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-close { display: inline-flex; align-items: center; justify-content: center; }
+            .app-main { margin-left: 0; }
+            .menu-btn { display: inline-flex; }
+            .topbar { padding: 13px 18px; }
+            .content { padding: 24px 18px 18px; }
+            .page-head { flex-direction: column; align-items: flex-start; gap: 18px; }
+            .head-date { align-self: stretch; justify-content: flex-start; }
+            .chart-wrap { height: 290px; }
+            body.nav-open { overflow: hidden; }
+        }
+        @media (max-width: 575.98px) {
+            .topbar-status { display: none; }
+            .topbar-user span { max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .page-head h1 { font-size: 52px; }
+            .stat-value { font-size: 32px; }
+            .chart-wrap { height: 260px; padding: 12px 12px 10px; }
+            .panel-head { padding: 16px 18px; }
+            .table thead th, .table tbody td { padding-left: 16px; padding-right: 16px; }
+            .dash-foot { padding: 18px 18px 22px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+        html.no-aos [data-aos] { opacity: 1 !important; transform: none !important; }
+    </style>
+</head>
+<body>
+
+<noscript><style>#loader{display:none!important}</style></noscript>
+
+<div id="loader" aria-hidden="true">
+    <div class="ld-name"><?php echo e($companyName); ?></div>
+    <div class="ld-spinner">
+        <div class="ld-ring"></div>
+        <div class="ld-ring"></div>
+        <div class="ld-ring"></div>
+    </div>
+    <div class="ld-progress"><div class="ld-fill"></div></div>
+    <div class="ld-msg">Loading workspace</div>
+</div>
+
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+<div class="noise" aria-hidden="true"></div>
+<div class="grid" aria-hidden="true"></div>
+
+<aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <div class="sidebar-head">
+        <a class="brand" href="<?php echo e(url('/dashboard')); ?>">
+            <span class="brand-mark"><i class="bi bi-box-seam-fill"></i></span>
+            <span class="brand-text">
+                <span class="brand-name" title="<?php echo e($companyName); ?>"><?php echo e($companyName); ?></span>
+                <span class="brand-sub">Inventory System</span>
+            </span>
+        </a>
+        <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Close navigation">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+
+    <?php $layoutActive = 'dashboard'; require APP_ROOT . '/views/layout/nav.php'; ?>
+
+    <div class="sidebar-user">
+        <div class="avatar"><?php echo e($initials); ?></div>
+        <div class="u-meta">
+            <div class="u-name"><?php echo e($displayName); ?></div>
+            <div class="u-role"><?php echo e(ucfirst($user['role'] ?? 'staff')); ?></div>
+        </div>
+        <a class="u-pass" href="<?php echo e(url('/auth?action=change_password')); ?>" title="Change password" aria-label="Change password">
+            <i class="bi bi-key"></i>
+        </a>
+    </div>
+    <form class="signout" action="<?php echo e(url('/auth?action=logout')); ?>" method="POST">
+        <?php echo csrf_field(); ?>
+        <input type="hidden" name="action" value="logout">
+        <button type="submit"><i class="bi bi-box-arrow-right"></i> Sign out</button>
+    </form>
+</aside>
+<div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+<div class="app-main">
+    <header class="topbar">
+        <button class="menu-btn" id="sidebarOpen" type="button" aria-label="Open navigation"
+                aria-controls="sidebar" aria-expanded="false">
+            <i class="bi bi-list"></i>
+        </button>
+        <div class="topbar-crumb">
+            <span>Workspace</span>
+            <i class="bi bi-chevron-right"></i>
+            <strong>Dashboard</strong>
+        </div>
+        <div class="topbar-right">
+            <span class="topbar-status"><span class="dot"></span> Secure session</span>
+            <span class="topbar-user"><i class="bi bi-person-circle"></i><span><?php echo e($displayName); ?></span></span>
+        </div>
+    </header>
+
+    <main class="content">
+        <section class="page-head" data-aos="fade-up">
+            <div>
+                <div class="eyebrow">Live overview</div>
+                <h1>DASHBOARD</h1>
+                <p>Welcome back, <strong><?php echo e($displayName); ?></strong>. Here is where stock, sales and the books stand right now.</p>
+            </div>
+            <div class="head-date">
+                <span class="hd-day"><?php echo e($today->format('d')); ?></span>
+                <span class="hd-meta">
+                    <b><?php echo e($today->format('F Y')); ?></b>
+                    <span><?php echo e($today->format('l')); ?></span>
+                </span>
+            </div>
+        </section>
+
+        <div class="row g-3 g-xl-4 mb-3 mb-xl-4">
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="40">
+                <article class="stat-card">
+                    <div class="stat-top">
+                        <span class="stat-icon"><i class="bi bi-boxes"></i></span>
+                        <span class="stat-tag">Stock</span>
+                    </div>
+                    <div class="stat-label">Inventory value</div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['inventory_value'] ?? 0)); ?></div>
+                    <div class="stat-foot">Current stock valuation</div>
+                </article>
+            </div>
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="90">
+                <article class="stat-card">
+                    <div class="stat-top">
+                        <span class="stat-icon blue"><i class="bi bi-file-earmark-text"></i></span>
+                        <span class="stat-tag">Sales</span>
+                    </div>
+                    <div class="stat-label">Sales this month</div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['total_sales'] ?? 0)); ?></div>
+                    <div class="stat-foot">Invoices issued this month</div>
+                </article>
+            </div>
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="140">
+                <article class="stat-card">
+                    <div class="stat-top">
+                        <span class="stat-icon cyan"><i class="bi bi-cash-coin"></i></span>
+                        <span class="stat-tag">Income</span>
+                    </div>
+                    <div class="stat-label">Income this month</div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['total_income'] ?? 0)); ?></div>
+                    <div class="stat-foot">Recorded income this month</div>
+                </article>
+            </div>
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="190">
+                <article class="stat-card">
+                    <div class="stat-top">
+                        <span class="stat-icon orange"><i class="bi bi-receipt"></i></span>
+                        <span class="stat-tag">Spend</span>
+                    </div>
+                    <div class="stat-label">Expenses this month</div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['total_expenses'] ?? 0)); ?></div>
+                    <div class="stat-foot">Operating costs this month</div>
+                </article>
+            </div>
+        </div>
+
+        <div class="row g-3 g-xl-4 mb-3 mb-xl-4">
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="40">
+                <div class="mini-card">
+                    <div>
+                        <div class="mini-label">Cash balance</div>
+                        <div class="mini-value"><?php echo e(formatPrice($summary['cash_balance'] ?? 0)); ?></div>
+                    </div>
+                    <i class="bi bi-wallet2 mini-ico lime"></i>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="80">
+                <div class="mini-card">
+                    <div>
+                        <div class="mini-label">Receivables</div>
+                        <div class="mini-value warn"><?php echo e(formatPrice($summary['outstanding_receivables'] ?? 0)); ?></div>
+                    </div>
+                    <i class="bi bi-arrow-down-left-circle mini-ico orange"></i>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="120">
+                <div class="mini-card">
+                    <div>
+                        <div class="mini-label">Payables</div>
+                        <div class="mini-value"><?php echo e(formatPrice($summary['outstanding_payables'] ?? 0)); ?></div>
+                    </div>
+                    <i class="bi bi-arrow-up-right-circle mini-ico blue"></i>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-xl-3" data-aos="fade-up" data-aos-delay="160">
+                <div class="mini-card">
+                    <div>
+                        <div class="mini-label">Active employees</div>
+                        <div class="mini-value"><?php echo (int) ($summary['active_employees'] ?? 0); ?></div>
+                    </div>
+                    <i class="bi bi-people mini-ico cyan"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 g-xl-4 mb-3 mb-xl-4">
+            <div class="col-12 col-xl-8" data-aos="fade-up">
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Sales vs expenses</h2>
+                            <p>Last 6 months</p>
+                        </div>
+                        <span class="panel-badge">6M</span>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="salesExpenseChart" aria-label="Monthly sales and expenses chart" role="img"></canvas>
+                    </div>
+                </section>
+            </div>
+            <div class="col-12 col-xl-4" data-aos="fade-up" data-aos-delay="80">
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Invoice status</h2>
+                            <p>All recorded invoices</p>
+                        </div>
+                        <span class="panel-badge">By status</span>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="invoiceStatusChart" aria-label="Invoice status chart" role="img"></canvas>
+                        <?php if (empty($invoiceStatus)): ?>
+                            <div class="chart-empty">No invoices recorded yet.</div>
+                        <?php endif; ?>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <div class="row g-3 g-xl-4">
+            <div class="col-12 col-xl-7" data-aos="fade-up">
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Recent sales invoices</h2>
+                            <p>Latest five</p>
+                        </div>
+                        <a class="panel-link" href="<?php echo e(url('/sales?action=list')); ?>">
+                            View all <i class="bi bi-arrow-up-right"></i>
+                        </a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Invoice</th>
+                                    <th>Customer</th>
+                                    <th>Issued</th>
+                                    <th class="text-end">Total</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($recentInvoices)): ?>
+                                    <tr>
+                                        <td colspan="5" class="empty-cell">
+                                            <i class="bi bi-file-earmark-text"></i>
+                                            No sales invoices yet.
+                                        </td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($recentInvoices as $invoice): ?>
+                                        <?php
+                                        $status = (string) $invoice['status'];
+                                        $statusClass = in_array($status, ['paid', 'partial', 'pending', 'cancelled', 'overdue'], true) ? $status : 'pending';
+                                        $issued = !empty($invoice['issue_date'])
+                                            ? date('M j, Y', strtotime((string) $invoice['issue_date']))
+                                            : '—';
+                                        ?>
+                                        <tr>
+                                            <td><span class="num"><?php echo e($invoice['invoice_number']); ?></span></td>
+                                            <td><?php echo e($invoice['customer_name'] ?? '—'); ?></td>
+                                            <td><?php echo e($issued); ?></td>
+                                            <td class="text-end"><span class="num"><?php echo e(formatPrice($invoice['total_amount'])); ?></span></td>
+                                            <td><span class="status <?php echo e($statusClass); ?>"><?php echo e(ucfirst($status)); ?></span></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-12 col-xl-5" data-aos="fade-up" data-aos-delay="80">
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Low stock</h2>
+                            <p>At or below reorder level</p>
+                        </div>
+                        <a class="panel-link" href="<?php echo e(url('/inventory?action=list')); ?>">
+                            Manage <i class="bi bi-arrow-up-right"></i>
+                        </a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-end">On hand</th>
+                                    <th class="text-end">Reorder at</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($lowStock)): ?>
+                                    <tr>
+                                        <td colspan="3" class="empty-cell">
+                                            <i class="bi bi-check2-circle"></i>
+                                            No low stock items.
+                                        </td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($lowStock as $item): ?>
+                                        <tr>
+                                            <td>
+                                                <div class="item-name"><?php echo e($item['name']); ?></div>
+                                                <div class="item-sub"><?php echo e($item['sku']); ?></div>
+                                            </td>
+                                            <td class="text-end"><span class="num"><?php echo e(number_format((float) $item['on_hand'], 2)); ?></span></td>
+                                            <td class="text-end"><span class="num"><?php echo e(number_format((float) $item['reorder_level'], 2)); ?></span></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <footer class="dash-foot">
+        <span>&copy; <?php echo e($today->format('Y')); ?> <?php echo e($companyName); ?></span>
+        <span>Inventory Management System &middot; v<?php echo e(APP_VERSION); ?></span>
+    </footer>
+</div>
+
+<script src="<?php echo e(asset('vendor/sweetalert2/sweetalert2.all.min.js')); ?>"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+        integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"
+        integrity="sha384-n1AULnKdMJlK1oQCLNDL9qZsDgXtH6jRYFCpBtWFc+a9Yve0KSoMn575rk755NJZ" crossorigin="anonymous"></script>
+<script>
+(function () {
+    'use strict';
+
+    /* Loader — dismiss once DOM is ready; CSS animation also hides it without JS */
+    (function () {
+        var loader = document.getElementById('loader');
+        if (!loader) { return; }
+        function hide() { loader.classList.add('out'); }
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            window.setTimeout(hide, 300);
+        } else {
+            document.addEventListener('DOMContentLoaded', function () { window.setTimeout(hide, 300); });
+        }
+        window.addEventListener('load', hide);
+    })();
+
+    /* Sidebar */
+    var sidebar = document.getElementById('sidebar');
+    var backdrop = document.getElementById('sidebarBackdrop');
+    var openBtn = document.getElementById('sidebarOpen');
+    var closeBtn = document.getElementById('sidebarClose');
+    var mobileQuery = window.matchMedia('(max-width: 991.98px)');
+
+    function setSidebar(open) {
+        if (!sidebar) { return; }
+        sidebar.classList.toggle('open', open);
+        if (backdrop) { backdrop.classList.toggle('show', open); }
+        if (openBtn) { openBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+        document.body.classList.toggle('nav-open', open && mobileQuery.matches);
+    }
+
+    if (openBtn) { openBtn.addEventListener('click', function () { setSidebar(true); }); }
+    if (closeBtn) { closeBtn.addEventListener('click', function () { setSidebar(false); }); }
+    if (backdrop) { backdrop.addEventListener('click', function () { setSidebar(false); }); }
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { setSidebar(false); }
+    });
+    if (sidebar) {
+        sidebar.querySelectorAll('a[href]').forEach(function (link) {
+            link.addEventListener('click', function (event) {
+                if (mobileQuery.matches) { setSidebar(false); }
+                // Show the preloader on the page this sidebar link opens.
+                if (event.defaultPrevented || event.button !== 0
+                    || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+                    || (link.target && link.target !== '_self')) {
+                    return;
+                }
+                try {
+                    sessionStorage.setItem('inv:navLoader', String(Date.now()));
+                } catch (e) { /* storage unavailable */ }
+            });
+        });
+    }
+    mobileQuery.addEventListener('change', function () { setSidebar(false); });
+
+    /* Logout — hold the loader while the sign-out POST is in flight. */
+    (function () {
+        var signout = document.querySelector('form.signout');
+        if (!signout) { return; }
+        signout.addEventListener('submit', function () {
+            document.documentElement.classList.add('loader-hold');
+            var loader = document.getElementById('loader');
+            if (loader) { loader.classList.remove('out'); }
+        });
+    })();
+
+    /* AOS */
+    if (typeof AOS !== 'undefined') {
+        AOS.init({
+            duration: 700,
+            easing: 'ease-out-cubic',
+            once: true,
+            offset: 60,
+            disable: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        });
+    } else {
+        document.documentElement.classList.add('no-aos');
+    }
+
+    /* Three.js background */
+    (function () {
+        var canvas = document.getElementById('bg-canvas');
+        if (!canvas || typeof THREE === 'undefined') { return; }
+
+        var renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        var scene = new THREE.Scene();
+        var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.z = 22;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        var lightOne = new THREE.PointLight(0xc8e932, 3, 60);
+        lightOne.position.set(6, 10, 12);
+        scene.add(lightOne);
+        var lightTwo = new THREE.PointLight(0x4488ff, 0.8, 40);
+        lightTwo.position.set(-10, -6, 8);
+        scene.add(lightTwo);
+        var lightThree = new THREE.PointLight(0xff9c4b, 0.4, 30);
+        lightThree.position.set(12, -8, 5);
+        scene.add(lightThree);
+
+        var boxMaterial = new THREE.MeshStandardMaterial({
+            color: 0x141820, transparent: true, opacity: 0.65, roughness: 0.2, metalness: 0.9
+        });
+        var glowMaterial = new THREE.MeshStandardMaterial({
+            color: 0xc8e932, transparent: true, opacity: 0.08, emissive: 0xc8e932,
+            emissiveIntensity: 0.5, roughness: 0.1, metalness: 1
+        });
+
+        var boxes = [];
+        for (var i = 0; i < 24; i++) {
+            var size = 0.3 + Math.random() * 2.4;
+            var geometry = new THREE.BoxGeometry(size, size * (0.65 + Math.random() * 0.7), size * (0.65 + Math.random() * 0.7));
+            var isGlow = i % 5 === 0;
+            var mesh = new THREE.Mesh(geometry, isGlow ? glowMaterial : boxMaterial);
+            var edges = new THREE.EdgesGeometry(geometry);
+            var wire = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({
+                color: isGlow ? 0xc8e932 : 0x252e40,
+                transparent: true,
+                opacity: isGlow ? 0.85 : 0.2
+            }));
+            mesh.add(wire);
+            mesh.position.set((Math.random() - 0.5) * 48, (Math.random() - 0.5) * 36, (Math.random() - 0.5) * 20 - 6);
+            mesh.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
+            boxes.push({
+                mesh: mesh,
+                spin: { x: (Math.random() - 0.5) * 0.006, y: (Math.random() - 0.5) * 0.005 },
+                drift: { x: (Math.random() - 0.5) * 0.008, y: (Math.random() - 0.5) * 0.006 }
+            });
+            scene.add(mesh);
+        }
+
+        var mouseX = 0;
+        var mouseY = 0;
+        document.addEventListener('mousemove', function (event) {
+            mouseX = (event.clientX / window.innerWidth - 0.5) * 2;
+            mouseY = (event.clientY / window.innerHeight - 0.5) * 2;
+        });
+
+        (function animate() {
+            window.requestAnimationFrame(animate);
+            if (document.hidden) { return; }
+            boxes.forEach(function (box) {
+                var mesh = box.mesh;
+                mesh.rotation.x += box.spin.x;
+                mesh.rotation.y += box.spin.y;
+                mesh.position.x += box.drift.x;
+                mesh.position.y += box.drift.y;
+                if (mesh.position.x > 26) { mesh.position.x = -26; }
+                if (mesh.position.x < -26) { mesh.position.x = 26; }
+                if (mesh.position.y > 20) { mesh.position.y = -20; }
+                if (mesh.position.y < -20) { mesh.position.y = 20; }
+            });
+            camera.position.x += (mouseX * 2 - camera.position.x) * 0.022;
+            camera.position.y += (-mouseY * 1.5 - camera.position.y) * 0.022;
+            camera.lookAt(0, 0, 0);
+            renderer.render(scene, camera);
+        })();
+
+        window.addEventListener('resize', function () {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    })();
+
+    /* Charts */
+    <?php
+    $chartFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+    $trendPayload = [
+        'labels' => $monthlyTrend['labels'] ?? [],
+        'sales' => $monthlyTrend['sales'] ?? [],
+        'expenses' => $monthlyTrend['expenses'] ?? [],
+    ];
+    $statusPayload = ['labels' => [], 'counts' => []];
+    foreach (($invoiceStatus ?? []) as $row) {
+        $statusPayload['labels'][] = ucfirst((string) $row['status']);
+        $statusPayload['counts'][] = (int) $row['invoice_count'];
+    }
+    ?>
+    var trendData = <?php echo json_encode($trendPayload, $chartFlags); ?>;
+    var statusData = <?php echo json_encode($statusPayload, $chartFlags); ?>;
+    var money = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    var gridColor = 'rgba(255, 255, 255, 0.06)';
+    var tickColor = 'rgba(255, 255, 255, 0.38)';
+
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.color = tickColor;
+        Chart.defaults.font.family = "'DM Sans', sans-serif";
+        Chart.defaults.font.size = 11;
+
+        var tooltipDefaults = {
+            backgroundColor: '#0c0f16',
+            borderColor: 'rgba(200, 233, 50, 0.25)',
+            borderWidth: 1,
+            titleColor: '#ffffff',
+            bodyColor: 'rgba(255, 255, 255, 0.68)',
+            padding: 12,
+            cornerRadius: 8,
+            displayColors: true,
+            boxWidth: 8,
+            boxHeight: 8,
+            usePointStyle: true
+        };
+
+        var salesCanvas = document.getElementById('salesExpenseChart');
+        if (salesCanvas) {
+            new Chart(salesCanvas, {
+                type: 'bar',
+                data: {
+                    labels: trendData.labels,
+                    datasets: [
+                        {
+                            label: 'Sales',
+                            data: trendData.sales,
+                            backgroundColor: 'rgba(200, 233, 50, 0.65)',
+                            borderColor: '#C8E932',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            maxBarThickness: 26
+                        },
+                        {
+                            label: 'Expenses',
+                            data: trendData.expenses,
+                            backgroundColor: 'rgba(75, 143, 255, 0.5)',
+                            borderColor: '#4b8fff',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            maxBarThickness: 26
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'end',
+                            labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: 'circle', padding: 18 }
+                        },
+                        tooltip: Object.assign({}, tooltipDefaults, {
+                            callbacks: {
+                                label: function (context) {
+                                    return context.dataset.label + ': ' + money.format(context.parsed.y || 0);
+                                }
+                            }
+                        })
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            border: { color: gridColor },
+                            ticks: { color: tickColor }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: gridColor },
+                            border: { display: false },
+                            ticks: {
+                                color: tickColor,
+                                callback: function (value) { return money.format(value); }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        var statusCanvas = document.getElementById('invoiceStatusChart');
+        if (statusCanvas && statusData.counts.length > 0) {
+            var statusPalette = {
+                Pending: '#8a96a8',
+                Partial: '#ff9c4b',
+                Paid: '#C8E932',
+                Cancelled: '#ff4b4b',
+                Overdue: '#ff4b4b'
+            };
+            new Chart(statusCanvas, {
+                type: 'doughnut',
+                data: {
+                    labels: statusData.labels,
+                    datasets: [{
+                        data: statusData.counts,
+                        backgroundColor: statusData.labels.map(function (label) {
+                            return statusPalette[label] || '#4b8fff';
+                        }),
+                        borderColor: '#0c0f16',
+                        borderWidth: 2,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '62%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: 'circle', padding: 14 }
+                        },
+                        tooltip: tooltipDefaults
+                    }
+                }
+            });
+        }
+
+        if (typeof AOS !== 'undefined') { AOS.refresh(); }
+    }
+})();
+</script>
+</body>
+</html>

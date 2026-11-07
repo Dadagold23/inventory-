@@ -1,0 +1,48 @@
+baseline: audit rows 97
+fixture: invoice 157 (INV-20261106-0782), total 200, change 50
+
+== A. who is handed a slip ==
+PASS  an anonymous visitor is sent to the login page
+PASS  nothing is printed for someone who never got in
+PASS  an admin of another company is turned away from this slip
+PASS  and no slip of theirs is left in the print trail
+PASS  a sale id that belongs to no one has no slip either
+PASS  the cashier who owns the sale is handed the slip
+
+== B. the paper the page is laid out for ==
+PASS  the default page is the company 80 mm paper
+PASS  the width switch relays the same slip for a 58 mm roll
+PASS  a width no printer is sold with is refused, and the configured paper is used
+PASS  the slip carries what the customer came for
+PASS  the bill and the change are both on the page
+PASS  the picture is carried inside the page, never as a fetchable address
+
+== C. the file a counter hands over ==
+PASS  a PDF is offered as a PDF, with its own length
+PASS  the file is a PDF from first line to last
+PASS  it is named for the sale it proves
+PASS  the 58 mm file is a narrower page, not the 80 mm page relabelled
+PASS  the download door keeps the same key as the page
+PASS  a format nobody prints falls back to the page, not to a broken file
+
+== D. printing leaves a record, and says so ==
+PASS  the first slip is stored as PRINT against the sale
+PASS  the same sale printed again admits on the paper that it is a reprint
+PASS  and the trail knows it too
+PASS  a download and a print are told apart in the trail
+PASS  every print row in the trail was left by this run, under the user who pressed it
+
+== E. the settings that decide the slip ==
+PASS  the settings screen offers the paper, the footer and the logo switch
+PASS  and the logo upload form is on the page, picture and all
+PASS  choosing the roll the printer actually holds is kept
+PASS  and every slip from then on is laid out for it without being asked
+PASS  a paper the layouts cannot render is refused over HTTP too
+PASS  a logo POST without the page token is refused outright
+
+== teardown evidence ==
+PASS  what the sweep deletes is exactly this run: one sale, one product, one branch, one user
+PASS  and every print row in the trail belongs to the sale being removed
+
+31 passed, 0 failed
+TEARDOWN  audit_log 97 (baseline 97), print rows 0, receipt settings 0 (found 0)

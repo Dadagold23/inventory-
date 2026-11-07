@@ -1,0 +1,366 @@
+<?php
+$pageHeading = 'Users & Roles';
+$pageEyebrow = 'Administration';
+$pageDescription = 'Manage user accounts, roles and permission grants.';
+$activeNav = 'admin';
+require APP_ROOT . '/views/layout/header.php';
+
+$canUsersWrite = can('users', 'create') || can('users', 'update') || can('users', 'delete') || can('users', 'reset_password');
+$canRolesWrite = can('roles', 'update');
+$permGroups = [];
+foreach ($allPermissions as $perm) {
+    $dot = strpos($perm['name'], '.');
+    $group = $dot === false ? 'other' : substr($perm['name'], 0, $dot);
+    $permGroups[$group][] = $perm;
+}
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <ul class="nav nav-tabs mt-4 mb-3" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link<?= $action === 'roles' ? '' : ' active' ?>" href="<?= e(url('/admin?action=users')) ?>">
+                        <i class="bi bi-people me-1"></i>Users
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link<?= $action === 'roles' ? ' active' : '' ?>" href="<?= e(url('/admin?action=roles')) ?>">
+                        <i class="bi bi-shield-lock me-1"></i>Roles &amp; Permissions
+                    </a>
+                </li>
+            </ul>
+
+<?php if ($action !== 'roles'): ?>
+            <!-- ================= Users tab ================= -->
+            <?php if (can('users', 'create')): ?>
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-person-plus me-2"></i>New User</div>
+                <div class="card-body">
+                    <form method="post" action="<?= e(url('/admin?action=users')) ?>" class="row g-2 align-items-end">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="create_user">
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">Username</label>
+                            <input class="form-control" name="username" required minlength="3" maxlength="50" pattern="[A-Za-z0-9_.\-]{3,50}">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">Full name</label>
+                            <input class="form-control" name="full_name">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small">Email</label>
+                            <input class="form-control" type="email" name="email" required>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">Role</label>
+                            <select class="form-select" name="role" required>
+                                <?php foreach ($roles as $r): ?>
+                                    <?php if (!empty($r['is_active'])): ?>
+                                    <option value="<?= e($r['role_key']) ?>"><?= e($r['name']) ?></option>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">Password</label>
+                            <input class="form-control" type="password" name="password" required minlength="8">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">Home branch</label>
+                            <select class="form-select" name="branch_id">
+                                <option value="0">&mdash; none &mdash;</option>
+                                <?php foreach ($branchOptions as $b): ?>
+                                <option value="<?= (int) $b['branch_id'] ?>"><?= e($b['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-plus-lg me-1"></i>Create user</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($editUser): ?>
+            <div class="card mb-4 border-info">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-pencil me-2"></i>Edit user: <?= e($editUser['username']) ?></span>
+                    <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/admin?action=users')) ?>">Cancel</a>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="<?= e(url('/admin?action=users')) ?>">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="update_user">
+                        <input type="hidden" name="user_id" value="<?= (int) $editUser['user_id'] ?>">
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small">Full name</label>
+                                <input class="form-control" name="full_name" value="<?= e($editUser['full_name'] ?? '') ?>">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small">Email</label>
+                                <input class="form-control" type="email" name="email" value="<?= e($editUser['email'] ?? '') ?>">
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label small">Role</label>
+                                <select class="form-select" name="role">
+                                    <?php foreach ($roles as $r): ?>
+                                    <option value="<?= e($r['role_key']) ?>" <?= $r['role_key'] === $editUser['role'] ? 'selected' : '' ?>
+                                        <?= empty($r['is_active']) && $r['role_key'] !== $editUser['role'] ? 'disabled' : '' ?>>
+                                        <?= e($r['name']) ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label small">Home branch</label>
+                                <select class="form-select" name="branch_id">
+                                    <option value="0">&mdash; none &mdash;</option>
+                                    <?php foreach ($branchOptions as $b): ?>
+                                    <option value="<?= (int) $b['branch_id'] ?>" <?= (int) $editUser['branch_id'] === (int) $b['branch_id'] ? 'selected' : '' ?>>
+                                        <?= e($b['name']) ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-2 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="is_active" id="editActive" <?= !empty($editUser['is_active']) ? 'checked' : '' ?>>
+                                    <label class="form-check-label small" for="editActive">Active</label>
+                                </div>
+                            </div>
+                        </div>
+                        <?php if ($branchOptions !== []): ?>
+                        <div class="mt-3">
+                            <label class="form-label small text-muted">Branch access (controls which branches' records this user can reach)</label>
+                            <div class="d-flex flex-wrap gap-3">
+                                <?php foreach ($branchOptions as $b): ?>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="branch_access[]"
+                                           id="uba<?= (int) $b['branch_id'] ?>" value="<?= (int) $b['branch_id'] ?>"
+                                           <?= in_array((int) $b['branch_id'], $editUserBranchIds, true) ? 'checked' : '' ?>>
+                                    <label class="form-check-label small" for="uba<?= (int) $b['branch_id'] ?>"><?= e($b['name']) ?></label>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        <details class="mt-3">
+                            <summary class="small text-muted">Individual permission overrides (<?= count($editUserPerms) ?> set)</summary>
+                            <div class="row mt-2" style="max-height:260px;overflow:auto">
+                                <?php foreach ($permGroups as $group => $perms): ?>
+                                <div class="col-6 col-md-3">
+                                    <div class="fw-semibold small text-capitalize mb-1"><?= e($group) ?></div>
+                                    <?php foreach ($perms as $p): ?>
+                                    <div class="form-check form-check-inline me-2">
+                                        <input class="form-check-input" type="checkbox" name="permissions[]"
+                                               id="up-<?= (int) $p['permission_id'] ?>" value="<?= e($p['name']) ?>"
+                                               <?= in_array($p['name'], $editUserPerms, true) ? 'checked' : '' ?>>
+                                        <label class="form-check-label small" for="up-<?= (int) $p['permission_id'] ?>"><?= e(substr($p['name'], strlen($group) + 1)) ?></label>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </details>
+                        <button class="btn btn-primary btn-sm mt-3" type="submit"><i class="bi bi-check-lg me-1"></i>Save changes</button>
+                    </form>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <div class="card">
+                <div class="card-header"><i class="bi bi-people me-2"></i>Users (<?= count($users) ?>)</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>User</th><th>Email</th><th>Role</th><th>Branch</th>
+                                <th>Status</th><th>Last login</th>
+                                <?php if ($canUsersWrite): ?><th class="text-end">Actions</th><?php endif; ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($users as $u): ?>
+                            <tr class="<?= empty($u['is_active']) ? 'opacity-50' : '' ?>">
+                                <td>
+                                    <div class="fw-semibold"><?= e($u['username']) ?></div>
+                                    <div class="small text-muted"><?= e($u['full_name'] ?? '') ?></div>
+                                </td>
+                                <td class="small"><?= e($u['email'] ?? '') ?></td>
+                                <td><span class="badge bg-secondary"><?= e($u['role_name'] ?? ucfirst((string) $u['role'])) ?></span></td>
+                                <td class="small"><?= e($u['branch_name'] ?? '&mdash;') ?></td>
+                                <td>
+                                    <?php if (!empty($u['is_active'])): ?>
+                                        <span class="badge bg-success">Active</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-danger">Disabled</span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($u['lock_until']) && strtotime((string) $u['lock_until']) > time()): ?>
+                                        <span class="badge bg-warning text-dark">Locked</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="small text-muted"><?= $u['last_login'] ? e(date('Y-m-d H:i', strtotime((string) $u['last_login']))) : 'never' ?></td>
+                                <?php if ($canUsersWrite): ?>
+                                <td class="text-end text-nowrap">
+                                    <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/admin?action=users&edit=' . (int) $u['user_id'])) ?>"
+                                       title="Edit"><i class="bi bi-pencil"></i></a>
+                                    <?php if (can('users', 'reset_password')): ?>
+                                    <button class="btn btn-sm btn-outline-warning" type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#pwd-<?= (int) $u['user_id'] ?>" title="Reset password"><i class="bi bi-key"></i></button>
+                                    <?php endif; ?>
+                                    <?php if (can('users', 'delete') && (int) $u['user_id'] !== $currentUserId): ?>
+                                    <form class="d-inline" method="post" action="<?= e(url('/admin?action=users')) ?>"
+                                          onsubmit="return confirm('Deactivate <?= e($u['username']) ?>? Records are preserved.')">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="delete_user">
+                                        <input type="hidden" name="delete_id" value="<?= (int) $u['user_id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Deactivate"><i class="bi bi-person-slash"></i></button>
+                                    </form>
+                                    <?php endif; ?>
+                                </td>
+                                <?php endif; ?>
+                            </tr>
+                            <?php if ($canUsersWrite && can('users', 'reset_password')): ?>
+                            <tr class="collapse" id="pwd-<?= (int) $u['user_id'] ?>">
+                                <td colspan="7" class="bg-body-tertiary">
+                                    <form class="row g-2 align-items-end" method="post" action="<?= e(url('/admin?action=users')) ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="reset_password">
+                                        <input type="hidden" name="user_id" value="<?= (int) $u['user_id'] ?>">
+                                        <div class="col-auto">
+                                            <label class="form-label small mb-0">New password (min 8 chars)</label>
+                                            <input class="form-control form-control-sm" type="password" name="new_password" required minlength="8">
+                                        </div>
+                                        <div class="col-auto">
+                                            <button class="btn btn-sm btn-warning" type="submit">Reset password</button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                        <?php if ($users === []): ?>
+                            <tr><td colspan="7" class="text-center text-muted py-4">No users found.</td></tr>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+<?php else: ?>
+            <!-- ================= Roles tab ================= -->
+            <?php if ($canRolesWrite): ?>
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-plus-circle me-2"></i>New Role</div>
+                <div class="card-body">
+                    <form method="post" action="<?= e(url('/admin?action=roles')) ?>" class="row g-2 align-items-end">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="create_role">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small">Role key</label>
+                            <input class="form-control" name="role_key" required pattern="[a-z][a-z0-9_]{2,49}" placeholder="e.g. regional_manager">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small">Display name</label>
+                            <input class="form-control" name="name" required>
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <label class="form-label small">Description</label>
+                            <input class="form-control" name="description">
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-primary btn-sm" type="submit">Create role</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-shield-lock me-2"></i>Roles (<?= count($roles) ?>)</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead><tr><th>Role</th><th>Description</th><th>Type</th><th>Status</th><?php if ($canRolesWrite): ?><th class="text-end">Actions</th><?php endif; ?></tr></thead>
+                        <tbody>
+                        <?php foreach ($roles as $r): ?>
+                            <tr class="<?= empty($r['is_active']) ? 'opacity-50' : '' ?>">
+                                <td>
+                                    <div class="fw-semibold"><?= e($r['name']) ?></div>
+                                    <code class="small"><?= e($r['role_key']) ?></code>
+                                </td>
+                                <td class="small text-muted"><?= e($r['description'] ?? '') ?></td>
+                                <td><?php if (!empty($r['is_system'])): ?><span class="badge bg-info">System</span><?php else: ?><span class="badge bg-secondary">Custom</span><?php endif; ?></td>
+                                <td><?= !empty($r['is_active']) ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-danger">Inactive</span>' ?></td>
+                                <?php if ($canRolesWrite): ?>
+                                <td class="text-end text-nowrap">
+                                    <a class="btn btn-sm btn-outline-primary" href="#matrix-<?= e(rawurlencode((string) $r['role_key'])) ?>"
+                                       title="Edit permissions"><i class="bi bi-list-check"></i> Permissions</a>
+                                    <?php if (empty($r['is_system'])): ?>
+                                    <form class="d-inline" method="post" action="<?= e(url('/admin?action=roles')) ?>"
+                                          onsubmit="return confirm('Delete role <?= e($r['role_key']) ?>?')">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="delete_role">
+                                        <input type="hidden" name="role_key" value="<?= e($r['role_key']) ?>">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                    <?php endif; ?>
+                                </td>
+                                <?php endif; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <?php if ($canRolesWrite): ?>
+            <div class="card">
+                <div class="card-header"><i class="bi bi-grid-3x3 me-2"></i>Permission grants per role</div>
+                <div class="card-body">
+                    <p class="small text-muted">The <code>admin</code> role bypasses permission checks and cannot be edited here.
+                        Changes replace the role's current grants exactly.</p>
+                    <?php foreach ($roles as $r): ?>
+                        <?php $rk = (string) $r['role_key']; if ($rk === 'admin') { continue; } ?>
+                        <div class="mb-4" id="matrix-<?= e($rk) ?>">
+                            <form method="post" action="<?= e(url('/admin?action=roles')) ?>">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="save_role_permissions">
+                                <input type="hidden" name="role_key" value="<?= e($rk) ?>">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0"><?= e($r['name']) ?>
+                                        <span class="text-muted small">(<?= count($rolePermMap[$rk] ?? []) ?> of <?= count($allPermissions) ?> permissions)</span>
+                                    </h6>
+                                    <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Save</button>
+                                </div>
+                                <div class="row">
+                                    <?php foreach ($permGroups as $group => $perms): ?>
+                                    <div class="col-6 col-md-4 col-lg-3 mb-2">
+                                        <div class="fw-semibold small text-capitalize border-bottom pb-1 mb-1"><?= e($group) ?></div>
+                                        <?php foreach ($perms as $p): ?>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="permissions[]"
+                                                   id="rp-<?= e($rk) ?>-<?= (int) $p['permission_id'] ?>" value="<?= e($p['name']) ?>"
+                                                   <?= isset($rolePermMap[$rk][$p['name']]) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small" for="rp-<?= e($rk) ?>-<?= (int) $p['permission_id'] ?>">
+                                                <?= e(substr($p['name'], strlen($group) + 1)) ?>
+                                            </label>
+                                        </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </form>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+<?php endif; ?>
+
+<?php require APP_ROOT . '/views/layout/footer.php'; ?>

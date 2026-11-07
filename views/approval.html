@@ -1,0 +1,450 @@
+<?php
+$pageHeading = 'Approvals';
+$pageEyebrow = 'Governance';
+$pageDescription = 'Workflow definitions and approval requests for business documents.';
+$activeNav = 'approval';
+ob_start();
+?>
+<span class="badge bg-warning text-dark align-self-center"><?php echo (int) $requestCounts['pending']; ?> pending</span>
+<span class="badge bg-success align-self-center"><?php echo (int) $requestCounts['approved']; ?> approved</span>
+<span class="badge bg-danger align-self-center"><?php echo (int) $requestCounts['rejected']; ?> rejected</span>
+<?php
+$pageActions = ob_get_clean();
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item"><a class="nav-link <?php echo $view === 'workflows' ? 'active' : ''; ?>" href="<?php echo e(url('/approval?action=workflows')); ?>">Workflows</a></li>
+                <li class="nav-item"><a class="nav-link <?php echo $view === 'requests' ? 'active' : ''; ?>" href="<?php echo e(url('/approval?action=requests')); ?>">Approval Requests</a></li>
+            </ul>
+
+            <?php if ($view === 'workflows'): ?>
+            <?php $editingWorkflow = !empty($workflow); ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold"><?php echo $editingWorkflow ? 'Edit workflow' : 'Create workflow'; ?></div>
+                        <div class="card-body">
+                            <form method="POST" action="<?php echo e(url('/approval?action=workflows')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_workflow">
+                                <input type="hidden" name="workflow_id" value="<?php echo $editingWorkflow ? (int) $workflow['workflow_id'] : 0; ?>">
+                                <div class="mb-3">
+                                    <label class="form-label" for="workflow_name">Name <span class="text-danger">*</span></label>
+                                    <input class="form-control" id="workflow_name" name="workflow_name" required maxlength="80" value="<?php echo e($editingWorkflow ? $workflow['name'] : ''); ?>">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="workflow_description">Description</label>
+                                    <textarea class="form-control" id="workflow_description" name="workflow_description" rows="3"><?php echo e($editingWorkflow ? ($workflow['description'] ?? '') : ''); ?></textarea>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label" for="sort_order">Sort order</label>
+                                        <input class="form-control" type="number" id="sort_order" name="sort_order" value="<?php echo $editingWorkflow ? (int) $workflow['sort_order'] : 0; ?>">
+                                    </div>
+                                    <div class="col-6 d-flex align-items-end">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="workflow_active" name="is_active" value="1" <?php echo (!$editingWorkflow || (int) $workflow['is_active'] === 1) ? 'checked' : ''; ?>>
+                                            <label class="form-check-label" for="workflow_active">Active</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i><?php echo $editingWorkflow ? 'Update workflow' : 'Create workflow'; ?></button>
+                                    <?php if ($editingWorkflow): ?>
+                                    <a class="btn btn-outline-secondary" href="<?php echo e(url('/approval?action=workflows')); ?>">Cancel</a>
+                                    <?php endif; ?>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Workflows</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Name</th>
+                                        <th class="text-end">Steps</th>
+                                        <th class="text-end">Pending</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($workflows === []): ?>
+                                    <tr><td colspan="6" class="text-center text-muted py-4">No workflows yet. Create the first workflow on the left.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($workflows as $index => $workflowRow): ?>
+                                    <?php $rowSteps = $stepsByWorkflow[(int) $workflowRow['workflow_id']] ?? []; ?>
+                                    <tr>
+                                        <td><?php echo $index + 1; ?></td>
+                                        <td>
+                                            <?php echo e($workflowRow['name']); ?>
+                                            <?php if (!empty($workflowRow['description'])): ?><div class="small text-muted"><?php echo e($workflowRow['description']); ?></div><?php endif; ?>
+                                        </td>
+                                        <td class="text-end"><?php echo (int) $workflowRow['step_count']; ?></td>
+                                        <td class="text-end"><?php echo (int) $workflowRow['request_count']; ?></td>
+                                        <td><span class="badge bg-<?php echo (int) $workflowRow['is_active'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $workflowRow['is_active'] === 1 ? 'Active' : 'Inactive'; ?></span></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/approval?action=workflows&workflow_id=' . (int) $workflowRow['workflow_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/approval?action=workflows')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="toggle_workflow">
+                                                <input type="hidden" name="workflow_id" value="<?php echo (int) $workflowRow['workflow_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-<?php echo (int) $workflowRow['is_active'] === 1 ? 'danger' : 'success'; ?>" title="<?php echo (int) $workflowRow['is_active'] === 1 ? 'Deactivate' : 'Activate'; ?>">
+                                                    <i class="fas fa-power-off"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    <tr class="small text-muted">
+                                        <td colspan="6" class="pt-0 pb-2 ps-4">
+                                            <?php if ($rowSteps === []): ?>
+                                            <span>No steps defined for this workflow.</span>
+                                            <?php else: ?>
+                                            <span class="me-2">Steps in order:</span>
+                                            <?php foreach ($rowSteps as $stepRow): ?>
+                                            <span class="badge bg-light text-dark border me-1 mb-1">
+                                                <?php echo (int) $stepRow['step_number']; ?>.
+                                                <?php echo e($roleLabels[$stepRow['role_required']] ?? $stepRow['role_required']); ?>
+                                                &middot; <?php echo e(ucfirst((string) $stepRow['action'])); ?>
+                                                <a class="ms-1 text-decoration-none" href="<?php echo e(url('/approval?action=workflows&workflow_id=' . (int) $workflowRow['workflow_id'] . '&step_id=' . (int) $stepRow['step_id'])); ?>" title="Edit step"><i class="fas fa-pen-to-square"></i></a>
+                                            </span>
+                                            <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($workflow !== []): ?>
+            <?php
+            $editingStep = !empty($editingStep) ? $editingStep : [];
+            $nextStepNumber = 1;
+            foreach ($workflowStepRows as $existingStep) {
+                $nextStepNumber = max($nextStepNumber, (int) $existingStep['step_number'] + 1);
+            }
+            $stepsLocked = $stepPendingCount > 0;
+            ?>
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="fw-semibold">Steps for “<?php echo e($workflow['name']); ?>”</span>
+                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/approval?action=workflows')); ?>">All workflows</a>
+                </div>
+                <div class="card-body">
+                    <?php if ($stepsLocked): ?>
+                    <div class="alert alert-warning">
+                        This workflow has <?php echo (int) $stepPendingCount; ?> pending request<?php echo $stepPendingCount === 1 ? '' : 's'; ?>.
+                        Steps cannot be deleted until those requests are approved or rejected.
+                    </div>
+                    <?php endif; ?>
+
+                    <div class="row g-4">
+                        <div class="col-12 col-xl-7">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Step</th>
+                                            <th>Role</th>
+                                            <th>Action</th>
+                                            <th>Notes</th>
+                                            <th class="text-end">Manage</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if ($workflowStepRows === []): ?>
+                                        <tr><td colspan="5" class="text-center text-muted py-3">No steps defined. Requests on this workflow require one approval.</td></tr>
+                                        <?php endif; ?>
+                                        <?php foreach ($workflowStepRows as $step): ?>
+                                        <tr>
+                                            <td><?php echo (int) $step['step_number']; ?></td>
+                                            <td>
+                                                <?php echo e($roleLabels[$step['role_required']] ?? $step['role_required']); ?>
+                                                <span class="text-muted small">(<?php echo e($step['role_required']); ?>)</span>
+                                            </td>
+                                            <td><span class="badge bg-secondary"><?php echo e(ucfirst($step['action'])); ?></span></td>
+                                            <td><?php echo e($step['notes'] ?? '—'); ?></td>
+                                            <td class="text-end">
+                                                <a class="btn btn-sm btn-outline-primary" title="Edit step" href="<?php echo e(url('/approval?action=workflows&workflow_id=' . (int) $workflow['workflow_id'] . '&step_id=' . (int) $step['step_id'])); ?>"><i class="fas fa-edit"></i></a>
+                                                <form class="d-inline" method="POST" action="<?php echo e(url('/approval?action=workflows&workflow_id=' . (int) $workflow['workflow_id'])); ?>" onsubmit="return confirm('Delete step <?php echo (int) $step['step_number']; ?> from this workflow?');">
+                                                    <?php echo csrf_field(); ?>
+                                                    <input type="hidden" name="action" value="delete_step">
+                                                    <input type="hidden" name="workflow_id" value="<?php echo (int) $workflow['workflow_id']; ?>">
+                                                    <input type="hidden" name="step_id" value="<?php echo (int) $step['step_id']; ?>">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="<?php echo $stepsLocked ? 'Delete blocked: pending requests exist' : 'Delete step'; ?>" <?php echo $stepsLocked ? 'disabled' : ''; ?>>
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-xl-5">
+                            <div class="card bg-body-tertiary border-0">
+                                <div class="card-header fw-semibold"><?php echo $editingStep !== [] ? 'Edit step #' . (int) $editingStep['step_id'] : 'Add workflow step'; ?></div>
+                                <div class="card-body">
+                                    <form method="POST" action="<?php echo e(url('/approval?action=workflows')); ?>">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="save_step">
+                                        <input type="hidden" name="workflow_id" value="<?php echo (int) $workflow['workflow_id']; ?>">
+                                        <input type="hidden" name="step_id" value="<?php echo $editingStep !== [] ? (int) $editingStep['step_id'] : 0; ?>">
+                                        <div class="mb-3">
+                                            <label class="form-label" for="step_number">Step number <span class="text-danger">*</span></label>
+                                            <input class="form-control" type="number" id="step_number" name="step_number" min="1" max="65535" required
+                                                   value="<?php echo $editingStep !== [] ? (int) $editingStep['step_number'] : $nextStepNumber; ?>">
+                                            <div class="form-text">Steps run in ascending order.</div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label" for="role_required">Role <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="role_required" name="role_required" required>
+                                                <?php foreach ($allRoles as $roleOption): ?>
+                                                <option value="<?php echo e($roleOption['role_key']); ?>" <?php echo $editingStep !== [] && $editingStep['role_required'] === $roleOption['role_key'] ? 'selected' : ''; ?>>
+                                                    <?php echo e($roleOption['name']); ?> (<?php echo e($roleOption['role_key']); ?>)
+                                                </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label" for="step_action">Action <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="step_action" name="step_action" required>
+                                                <?php foreach (APPROVAL_ACTIONS as $actionChoice): ?>
+                                                <option value="<?php echo e($actionChoice); ?>" <?php echo $editingStep !== [] && $editingStep['action'] === $actionChoice ? 'selected' : ''; ?>><?php echo e(ucfirst($actionChoice)); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label" for="step_notes">Notes</label>
+                                            <textarea class="form-control" id="step_notes" name="step_notes" rows="3"><?php echo e($editingStep !== [] ? ($editingStep['notes'] ?? '') : ''); ?></textarea>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i><?php echo $editingStep !== [] ? 'Update step' : 'Add step'; ?></button>
+                                            <?php if ($editingStep !== []): ?>
+                                            <a class="btn btn-outline-secondary" href="<?php echo e(url('/approval?action=workflows&workflow_id=' . (int) $workflow['workflow_id'])); ?>">Cancel</a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+            <?php endif; ?>
+
+            <?php if ($view === 'requests'): ?>
+            <div class="row g-4">
+                <div class="col-12 col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header fw-semibold">Submit approval request</div>
+                        <div class="card-body">
+                            <?php if ($activeWorkflows === []): ?>
+                            <div class="alert alert-warning mb-0">Create and activate a workflow before submitting requests.</div>
+                            <?php else: ?>
+                            <form method="POST" action="<?php echo e(url('/approval?action=requests')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="submit_request">
+                                <div class="mb-3">
+                                    <label class="form-label" for="workflow_id">Workflow <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="workflow_id" name="workflow_id" required>
+                                        <?php foreach ($activeWorkflows as $workflowRow): ?>
+                                        <option value="<?php echo (int) $workflowRow['workflow_id']; ?>"><?php echo e($workflowRow['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="entity_type">Entity type <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="entity_type" name="entity_type" required>
+                                        <?php foreach ($entityTypes as $value => $label): ?>
+                                        <option value="<?php echo e($value); ?>"><?php echo e($label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="entity_id">Entity ID <span class="text-danger">*</span></label>
+                                    <input class="form-control" type="number" min="1" id="entity_id" name="entity_id" required placeholder="Record ID being approved">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="notes">Notes</label>
+                                    <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane me-2"></i>Submit request</button>
+                            </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <span class="fw-semibold">Requests</span>
+                            <form method="GET" action="<?php echo e(url('/approval')); ?>">
+                                <input type="hidden" name="action" value="requests">
+                                <select class="form-select form-select-sm" name="status" onchange="this.form.submit()">
+                                    <?php foreach (['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected', 'expired' => 'Expired', 'all' => 'All statuses'] as $value => $label): ?>
+                                    <option value="<?php echo e($value); ?>" <?php echo $statusFilter === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </form>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Entity</th>
+                                        <th>Workflow</th>
+                                        <th>Requester</th>
+                                        <th>Submitted</th>
+                                        <th class="text-end">Progress</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($requests === []): ?>
+                                    <tr><td colspan="8" class="text-center text-muted py-4">No requests match the current filter.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($requests as $requestRow): ?>
+                                    <?php
+                                    $statusBadge = match ($requestRow['status']) {
+                                        'approved' => 'success',
+                                        'rejected' => 'danger',
+                                        'expired' => 'secondary',
+                                        default => 'warning text-dark',
+                                    };
+                                    ?>
+                                    <tr>
+                                        <td><?php echo (int) $requestRow['request_id']; ?></td>
+                                        <td><?php echo e(str_replace('_', ' ', $requestRow['entity_type'])); ?> #<?php echo (int) $requestRow['entity_id']; ?></td>
+                                        <td><?php echo e($requestRow['workflow_name'] ?? '—'); ?></td>
+                                        <td><?php echo e($requestRow['requester_name'] ?? ('User #' . (int) $requestRow['requester_id'])); ?></td>
+                                        <td><?php echo e(date('M d, Y H:i', strtotime($requestRow['submitted_date']))); ?></td>
+                                        <td class="text-end"><?php echo (int) $requestRow['approval_count']; ?> / <?php echo (int) $requestRow['required_count']; ?></td>
+                                        <td><span class="badge bg-<?php echo $statusBadge; ?>"><?php echo e(ucfirst($requestRow['status'])); ?></span></td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/approval?action=requests&status=' . $statusFilter . '&request_id=' . (int) $requestRow['request_id'])); ?>">View</a>
+                                            <?php if ($requestRow['status'] === 'pending'): ?>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/approval?action=requests')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="approve_request">
+                                                <input type="hidden" name="request_id" value="<?php echo (int) $requestRow['request_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Approve"><i class="fas fa-check"></i></button>
+                                            </form>
+                                            <form class="d-inline" method="POST" action="<?php echo e(url('/approval?action=requests')); ?>">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="reject_request">
+                                                <input type="hidden" name="request_id" value="<?php echo (int) $requestRow['request_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Reject"><i class="fas fa-times"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($request !== []): ?>
+            <?php $canApprove = $request['status'] === 'pending' && userCanApprove($pdo, (int) $request['request_id'], (int) ($_SESSION['user_id'] ?? 0)); ?>
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="fw-semibold">Request #<?php echo (int) $request['request_id']; ?> — <?php echo e($request['workflow_name'] ?? 'Workflow'); ?></span>
+                    <span class="badge bg-<?php echo $request['status'] === 'approved' ? 'success' : ($request['status'] === 'rejected' ? 'danger' : ($request['status'] === 'expired' ? 'secondary' : 'warning text-dark')); ?>"><?php echo e(ucfirst($request['status'])); ?></span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-3"><div class="text-muted small">Entity</div><div><?php echo e(str_replace('_', ' ', $request['entity_type'])); ?> #<?php echo (int) $request['entity_id']; ?></div></div>
+                        <div class="col-12 col-md-3"><div class="text-muted small">Requester</div><div><?php echo e($request['requester_name'] ?? ('User #' . (int) $request['requester_id'])); ?></div></div>
+                        <div class="col-12 col-md-3"><div class="text-muted small">Submitted</div><div><?php echo e(date('M d, Y H:i', strtotime($request['submitted_date']))); ?></div></div>
+                        <div class="col-12 col-md-3"><div class="text-muted small">Progress</div><div><?php echo (int) $request['approval_count']; ?> / <?php echo (int) $request['required_count']; ?> approvals</div></div>
+                        <div class="col-12"><div class="text-muted small">Notes</div><div><?php echo e($request['notes'] ?? '—'); ?></div></div>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-12 col-lg-5">
+                            <h6 class="fw-semibold">Workflow steps</h6>
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Step</th><th>Role(s)</th><th>Action</th></tr></thead>
+                                <tbody>
+                                    <?php if ($requestSteps === []): ?>
+                                    <tr><td colspan="3" class="text-muted">No steps configured.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($requestSteps as $step): ?>
+                                    <tr>
+                                        <td><?php echo (int) $step['step_number']; ?></td>
+                                        <td><?php echo e($step['role_required']); ?></td>
+                                        <td><?php echo e(ucfirst($step['action'])); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-12 col-lg-7">
+                            <h6 class="fw-semibold">Action history</h6>
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Date</th><th>User</th><th>Action</th><th>Comments</th></tr></thead>
+                                <tbody>
+                                    <?php if ($requestActions === []): ?>
+                                    <tr><td colspan="4" class="text-muted">No actions recorded.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($requestActions as $actionRow): ?>
+                                    <tr>
+                                        <td><?php echo e(date('M d, Y H:i', strtotime($actionRow['action_date']))); ?></td>
+                                        <td><?php echo e($actionRow['user_name'] ?? ('User #' . (int) $actionRow['user_id'])); ?></td>
+                                        <td><span class="badge bg-<?php echo $actionRow['action'] === 'approve' ? 'success' : ($actionRow['action'] === 'reject' ? 'danger' : 'secondary'); ?>"><?php echo e(ucfirst($actionRow['action'])); ?></span></td>
+                                        <td><?php echo e($actionRow['comments'] ?? '—'); ?></td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <?php if ($canApprove): ?>
+                    <hr>
+                    <form method="POST" action="<?php echo e(url('/approval?action=requests')); ?>" class="row g-2 align-items-end">
+                        <?php echo csrf_field(); ?>
+                        <input type="hidden" name="request_id" value="<?php echo (int) $request['request_id']; ?>">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label" for="comments">Comments</label>
+                            <input class="form-control" id="comments" name="comments" maxlength="500">
+                        </div>
+                        <div class="col-12 col-md-6 d-flex gap-2">
+                            <button type="submit" name="action" value="approve_request" class="btn btn-success"><i class="fas fa-check me-2"></i>Approve</button>
+                            <button type="submit" name="action" value="reject_request" class="btn btn-danger"><i class="fas fa-times me-2"></i>Reject</button>
+                        </div>
+                    </form>
+                    <?php elseif ($request['status'] === 'pending'): ?>
+                    <div class="alert alert-info mb-0">You have already approved this request, or it can no longer be actioned.</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            <?php endif; ?>
+<?php require APP_ROOT . '/views/layout/footer.php'; ?>

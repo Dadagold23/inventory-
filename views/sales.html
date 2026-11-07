@@ -1,0 +1,955 @@
+<?php
+$pageHeading = 'Sales';
+$pageEyebrow = 'Revenue operations';
+$pageDescription = 'Invoices, quotes, customers and point-of-sale in one place.';
+$activeNav = 'sales';
+$pageActions = '';
+require APP_ROOT . '/views/layout/header.php';
+
+// DB-backed payment methods (cash-first); keep bank_transfer first in the
+// Record Payment modal so its historical default option is unchanged.
+$paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
+    ? array_merge(['bank_transfer' => $paymentMethodOptions['bank_transfer']], $paymentMethodOptions)
+    : ($paymentMethodOptions ?? []);
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <ul class="nav nav-tabs mb-3 mt-3" id="salesTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link <?php echo in_array($action, ['sales', 'list', 'manage_sales'], true) ? 'active' : ''; ?>" id="sales-tab" data-bs-toggle="tab" data-bs-target="#sales" type="button" role="tab">Sales History</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link <?php echo $action === 'quotes' ? 'active' : ''; ?>" id="quotes-tab" data-bs-toggle="tab" data-bs-target="#quotes" type="button" role="tab">Quotes</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link <?php echo $action === 'customers' ? 'active' : ''; ?>" id="customers-tab" data-bs-toggle="tab" data-bs-target="#customers" type="button" role="tab">Customers</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link <?php echo $action === 'pos' ? 'active' : ''; ?>" id="pos-tab" data-bs-toggle="tab" data-bs-target="#pos" type="button" role="tab">Point of Sale</button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="salesTabsContent">
+
+                <!-- Sales History -->
+                <div class="tab-pane fade <?php echo in_array($action, ['sales', 'list', 'manage_sales'], true) ? 'show active' : ''; ?>" id="sales" role="tabpanel">
+                    <div class="row">
+                        <div class="col-12">
+                            <h2><i class="fas fa-shopping-basket me-2"></i>Sales History</h2>
+                            <button class="btn btn-primary mb-2 js-sale-modal" data-bs-toggle="modal" data-bs-target="#saleModal">
+                                <i class="fas fa-plus me-2"></i> Record Sale
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-foundation mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Invoice #</th>
+                                        <th>Customer</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Total</th>
+                                        <th class="text-end">Paid</th>
+                                        <th class="text-end">Balance</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $statusClasses = [
+                                        'paid' => 'success', 'partial' => 'info', 'pending' => 'warning',
+                                        'draft' => 'secondary', 'cancelled' => 'danger',
+                                    ];
+                                    foreach ($sales as $i => $row):
+                                    ?>
+                                    <tr>
+                                        <td><?php echo $i + 1; ?></td>
+                                        <td><?php echo e($row['invoice_number']); ?></td>
+                                        <td><?php echo e($row['customer_name'] ?? 'Walk-in'); ?></td>
+                                        <td><?php echo e(date('M d, Y', strtotime($row['issue_date']))); ?></td>
+                                        <td><span class="badge bg-<?php echo e($statusClasses[$row['status']] ?? 'secondary'); ?>"><?php echo e($row['status']); ?></span></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount_paid']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount_owed']); ?></td>
+                                        <td class="text-nowrap">
+                                            <a class="btn btn-sm btn-outline-primary" title="Print Receipt" target="_blank" rel="noopener"
+                                                href="<?php echo e(url('/sales?action=receipt&sale_id=' . (int) $row['invoice_id'])); ?>">
+                                                <i class="fas fa-print"></i>
+                                            </a>
+                                            <a class="btn btn-sm btn-outline-secondary" title="View" href="<?php echo e(url('/sales?action=sales&sale_id=' . (int) $row['invoice_id'])); ?>">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <?php if (in_array($row['status'], ['pending', 'partial'], true)): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-success js-pay-sale" title="Record Payment"
+                                                data-bs-toggle="modal" data-bs-target="#paymentModal"
+                                                data-id="<?php echo (int) $row['invoice_id']; ?>"
+                                                data-customer="<?php echo (int) $row['customer_id']; ?>"
+                                                data-invoice="<?php echo e($row['invoice_number']); ?>"
+                                                data-amount="<?php echo e(number_format((float) $row['amount_owed'], 2, '.', '')); ?>">
+                                                <i class="fas fa-money-bill"></i>
+                                            </button>
+                                            <form action="<?php echo e(url('/sales?action=sales')); ?>" method="POST" class="d-inline" data-confirm="Cancel this sale and restore stock?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="cancel_sale">
+                                                <input type="hidden" name="delete_id" value="<?php echo (int) $row['invoice_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancel"><i class="fas fa-times"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                    <?php if ($sales === []): ?>
+                                    <tr><td colspan="9" class="text-center text-muted">No sales recorded yet.</td></tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($sale)): ?>
+                    <div class="card mt-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Invoice <?php echo e($sale['invoice_number']); ?></h5>
+                            <div class="d-flex align-items-center gap-2">
+                                <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener"
+                                    href="<?php echo e(url('/sales?action=receipt&sale_id=' . (int) $sale['invoice_id'])); ?>">
+                                    <i class="fas fa-print me-1"></i>Print Receipt
+                                </a>
+                                <span class="badge bg-<?php echo e($statusClasses[$sale['status']] ?? 'secondary'); ?>"><?php echo e($sale['status']); ?></span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-1"><strong>Customer:</strong> <?php echo e($sale['customer_name'] ?? 'Walk-in'); ?></p>
+                            <p class="mb-1"><strong>Issued:</strong> <?php echo e($sale['issue_date']); ?> &nbsp; <strong>Due:</strong> <?php echo e($sale['due_date'] ?? '—'); ?></p>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead><tr><th>Item</th><th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Line Total</th></tr></thead>
+                                    <tbody>
+                                    <?php foreach ($sale['items'] as $item): ?>
+                                        <tr>
+                                            <td><?php echo e($item['description']); ?></td>
+                                            <td class="text-end"><?php echo number_format((float) $item['quantity'], 2); ?></td>
+                                            <td class="text-end"><?php echo formatPrice((float) $item['unit_price']); ?></td>
+                                            <td class="text-end"><?php echo formatPrice((float) $item['line_total']); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="mb-0 text-end"><strong>Total:</strong> <?php echo formatPrice((float) $sale['total_amount']); ?> &nbsp; <strong>Balance:</strong> <?php echo formatPrice((float) $sale['amount_owed']); ?></p>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Quotes -->
+                <div class="tab-pane fade <?php echo $action === 'quotes' ? 'show active' : ''; ?>" id="quotes" role="tabpanel">
+                    <div class="row">
+                        <div class="col-12">
+                            <h2><i class="fas fa-file-invoice me-2"></i>Quotes</h2>
+                            <button class="btn btn-primary mb-2 js-quote-modal" data-bs-toggle="modal" data-bs-target="#quoteModal">
+                                <i class="fas fa-plus me-2"></i> Create Quote
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-foundation mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Quote #</th>
+                                        <th>Customer</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Total</th>
+                                        <th>Expiry</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $quoteClasses = [
+                                        'draft' => 'secondary', 'sent' => 'info', 'accepted' => 'success',
+                                        'rejected' => 'danger', 'expired' => 'secondary', 'converted' => 'primary',
+                                    ];
+                                    foreach ($quotes as $i => $row):
+                                    ?>
+                                    <tr>
+                                        <td><?php echo $i + 1; ?></td>
+                                        <td><?php echo e($row['quote_number']); ?></td>
+                                        <td><?php echo e($row['customer_name'] ?? 'N/A'); ?></td>
+                                        <td><span class="badge bg-<?php echo e($quoteClasses[$row['status']] ?? 'secondary'); ?>"><?php echo e($row['status']); ?></span></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td><?php echo $row['expiry_date'] ? e(date('M d, Y', strtotime($row['expiry_date']))) : 'N/A'; ?></td>
+                                        <td class="text-nowrap">
+                                            <?php if (!in_array($row['status'], ['converted', 'rejected', 'expired'], true)): ?>
+                                            <form action="<?php echo e(url('/sales?action=quotes')); ?>" method="POST" class="d-inline">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="convert_quote">
+                                                <input type="hidden" name="quote_id" value="<?php echo (int) $row['quote_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Convert to Sale"><i class="fas fa-arrow-right"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                            <?php if ($row['status'] !== 'converted'): ?>
+                                            <form action="<?php echo e(url('/sales?action=quotes')); ?>" method="POST" class="d-inline" data-confirm="Delete this quote?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="delete_quote">
+                                                <input type="hidden" name="delete_id" value="<?php echo (int) $row['quote_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                    <?php if ($quotes === []): ?>
+                                    <tr><td colspan="7" class="text-center text-muted">No quotes created yet.</td></tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Customers -->
+                <div class="tab-pane fade <?php echo $action === 'customers' ? 'show active' : ''; ?>" id="customers" role="tabpanel">
+                    <div class="row">
+                        <div class="col-12">
+                            <h2><i class="fas fa-users me-2"></i>Customers</h2>
+                            <button class="btn btn-primary mb-2 js-add-customer" data-bs-toggle="modal" data-bs-target="#customerModal">
+                                <i class="fas fa-user-plus me-2"></i> Add Customer
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-foundation mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Phone</th>
+                                        <th>Terms</th>
+                                        <th class="text-end">Credit Limit</th>
+                                        <th class="text-end">Outstanding</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($customers as $i => $row): ?>
+                                    <tr>
+                                        <td><?php echo $i + 1; ?></td>
+                                        <td><?php echo e($row['name']); ?></td>
+                                        <td><?php echo e($row['email'] ?? ''); ?></td>
+                                        <td><?php echo e($row['phone'] ?? ''); ?></td>
+                                        <td><?php echo e($row['payment_terms'] ?? ''); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) ($row['credit_limit'] ?? 0)); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) ($row['outstanding'] ?? 0)); ?></td>
+                                        <td>
+                                            <span class="badge bg-<?php echo !empty($row['is_active']) ? 'success' : 'danger'; ?>">
+                                                <?php echo !empty($row['is_active']) ? 'Active' : 'Inactive'; ?>
+                                            </span>
+                                        </td>
+                                        <td class="text-nowrap">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary js-edit-customer" title="Edit"
+                                                data-bs-toggle="modal" data-bs-target="#customerModal"
+                                                data-id="<?php echo (int) $row['customer_id']; ?>"
+                                                data-name="<?php echo e($row['name']); ?>"
+                                                data-email="<?php echo e($row['email'] ?? ''); ?>"
+                                                data-phone="<?php echo e($row['phone'] ?? ''); ?>"
+                                                data-tax="<?php echo e($row['tax_id'] ?? ''); ?>"
+                                                data-address="<?php echo e($row['address'] ?? ''); ?>"
+                                                data-city="<?php echo e($row['city'] ?? ''); ?>"
+                                                data-state="<?php echo e($row['state'] ?? ''); ?>"
+                                                data-postal="<?php echo e($row['postal_code'] ?? ''); ?>"
+                                                data-country="<?php echo e($row['country'] ?? ''); ?>"
+                                                data-credit="<?php echo e(number_format((float) ($row['credit_limit'] ?? 0), 2, '.', '')); ?>"
+                                                data-terms="<?php echo e($row['payment_terms'] ?? 'Net 30'); ?>"
+                                                data-active="<?php echo (int) $row['is_active']; ?>"
+                                                data-exempt="<?php echo (int) ($row['is_tax_exempt'] ?? 0); ?>"
+                                                data-notes="<?php echo e($row['notes'] ?? ''); ?>">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <?php if (!empty($row['is_active'])): ?>
+                                            <form action="<?php echo e(url('/sales?action=customers')); ?>" method="POST" class="d-inline" data-confirm="Deactivate this customer?">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="delete_customer">
+                                                <input type="hidden" name="delete_id" value="<?php echo (int) $row['customer_id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Deactivate"><i class="fas fa-user-slash"></i></button>
+                                            </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                    <?php if ($customers === []): ?>
+                                    <tr><td colspan="9" class="text-center text-muted">No customers yet.</td></tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POS -->
+                <div class="tab-pane fade <?php echo $action === 'pos' ? 'show active' : ''; ?>" id="pos" role="tabpanel">
+                    <div class="row">
+                        <div class="col-12">
+                            <h2><i class="fas fa-cash-register me-2"></i>Point of Sale</h2>
+                            <p class="text-muted mb-0">Scan or search, add to the cart and take payment. Prices and totals are always recalculated on the server.</p>
+                        </div>
+                    </div>
+
+                    <?php
+                    $shiftOpen = (bool) ($posShift['open'] ?? false);
+                    $shiftBlocked = $shiftOpen === false && !empty($posShift['required']);
+                    ?>
+                    <div class="card mb-3 border-0 shadow-sm <?php echo $shiftBlocked ? 'border-start border-4 border-warning' : ''; ?>" id="posShiftBar"
+                         data-shift-url="<?php echo e(url('/sales?action=pos&format=json')); ?>">
+                        <div class="card-body d-flex flex-wrap align-items-center gap-3 py-2">
+                            <?php if ($shiftOpen): ?>
+                            <span class="badge bg-success"><i class="fas fa-unlock me-1"></i>Shift #<?php echo (int) $posShift['shift_id']; ?> open</span>
+                            <span class="small text-muted">since <?php echo e(date('H:i', strtotime((string) $posShift['opened_at']))); ?></span>
+                            <span class="ms-auto small">Sales on shift <strong id="posShiftSales"><?php echo (int) $posShift['sales_count']; ?></strong></span>
+                            <span class="small">Expected in drawer <strong id="posShiftExpected"><?php echo e(formatPrice((float) $posShift['expected_cash'])); ?></strong></span>
+                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/shifts?action=detail&shift_id=' . (int) $posShift['shift_id'])); ?>">
+                                <i class="fas fa-wallet me-1"></i>Movements
+                            </a>
+                            <?php elseif ($shiftBlocked): ?>
+                            <span class="badge bg-warning text-dark"><i class="fas fa-lock me-1"></i>Register locked</span>
+                            <span class="small" id="posShiftReason"><?php echo e($posShift['reason'] ?? 'No shift is open.'); ?></span>
+                            <a class="btn btn-sm btn-warning ms-auto" href="<?php echo e(url('/shifts?action=new')); ?>">
+                                <i class="fas fa-unlock me-1"></i>Open a shift
+                            </a>
+                            <?php else: ?>
+                            <span class="badge bg-secondary"><i class="fas fa-lock-open me-1"></i>Shift not required</span>
+                            <span class="small text-muted">This company allows POS sales without an open shift, so cash is not tied to a drawer.</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="row g-3" id="posApp"
+                         data-pos-endpoint="<?php echo e(url('/sales?action=pos')); ?>"
+                         data-csrf="<?php echo e(csrf_token()); ?>"
+                         data-idempotency="<?php echo e($posIdempotencyKey); ?>"
+                         data-cash-codes="<?php echo e(json_encode(array_values($posCashCodes))); ?>"
+                         data-total="<?php echo e(number_format($posTotal, 2, '.', '')); ?>"
+                         data-count="<?php echo e((string) count($posCart)); ?>"
+                         data-shift-allowed="<?php echo empty($posShift['allowed']) ? '0' : '1'; ?>">
+                        <div class="col-lg-7">
+                            <div class="card">
+                                <div class="card-header"><h5 class="card-title mb-0"><i class="fas fa-barcode me-2"></i>Scan or search</h5></div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="posScan">Barcode</label>
+                                        <input type="text" class="form-control form-control-lg font-monospace" id="posScan"
+                                               autocomplete="off" placeholder="Scan a label, or type a code and press Enter">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label" for="posSearch">Search products</label>
+                                        <input type="search" class="form-control" id="posSearch" autocomplete="off"
+                                               placeholder="Name, SKU or barcode">
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover align-middle mb-0" id="posResults">
+                                            <thead><tr><th>Product</th><th>SKU</th><th class="text-end">Price</th><th class="text-end">Stock</th><th class="text-end" style="width:120px">Qty</th><th style="width:70px"></th></tr></thead>
+                                            <tbody>
+                                                <tr class="text-muted"><td colspan="6">Type at least two letters, or scan a code.</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <details class="mt-3">
+                                        <summary class="small text-muted">Browse the full product list</summary>
+                                        <div class="table-responsive mt-2" style="max-height:260px;overflow:auto">
+                                            <table class="table table-sm mb-0">
+                                                <thead><tr><th>Product</th><th>SKU</th><th class="text-end">Price</th><th class="text-end">Stock</th><th class="text-end" style="width:120px">Qty</th><th style="width:70px"></th></tr></thead>
+                                                <tbody>
+                                                <?php foreach ($products as $product):
+                                                    $stockQty = (float) ($productStock[(int) $product['product_id']] ?? 0);
+                                                ?>
+                                                    <tr>
+                                                        <td><?php echo e($product['name']); ?></td>
+                                                        <td><?php echo e($product['sku'] ?? ''); ?></td>
+                                                        <td class="text-end"><?php echo e(formatPrice((float) ($product['sales_price'] ?? 0))); ?></td>
+                                                        <td class="text-end"><?php echo $stockQty <= 0 ? '<span class="badge bg-danger">Out</span>' : e(number_format($stockQty, 2)); ?></td>
+                                                        <td class="text-end"><input type="number" class="form-control form-control-sm pos-browse-qty" value="1" min="0.01" step="0.01" data-product="<?php echo (int) $product['product_id']; ?>"></td>
+                                                        <td><button type="button" class="btn btn-sm btn-primary pos-browse-add" data-product="<?php echo (int) $product['product_id']; ?>">Add</button></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                                <?php if ($products === []): ?>
+                                                <tr><td colspan="6" class="text-muted">No products available.</td></tr>
+                                                <?php endif; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="p-2">
+                                            <form action="<?php echo e(url('/sales?action=pos')); ?>" method="POST" class="d-inline">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="pos_action" value="clear_cart">
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary">Clear cart</button>
+                                            </form>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-5">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0"><i class="fas fa-shopping-cart me-2"></i>Cart <span class="badge bg-secondary" id="posCount"><?php echo count($posCart); ?></span></h5>
+                                    <span class="badge bg-primary" id="posTotalBadge"><?php echo e(formatPrice($posTotal)); ?></span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle" id="posCartTable">
+                                            <thead><tr><th>Item</th><th style="width:110px">Qty</th><th style="width:78px">Disc %</th><th class="text-end">Total</th><th style="width:40px"></th></tr></thead>
+                                            <tbody>
+                                            <?php if ($posCart === []): ?>
+                                                <tr class="text-muted"><td colspan="5">Cart is empty.</td></tr>
+                                            <?php else: foreach ($posCart as $idx => $item): ?>
+                                                <tr>
+                                                    <td><?php echo e($item['product_name']); ?><div class="small text-muted"><?php echo e(formatPrice((float) $item['unit_price'])); ?></div></td>
+                                                    <td><input type="number" class="form-control form-control-sm pos-qty" data-index="<?php echo (int) $idx; ?>" value="<?php echo e(number_format((float) $item['quantity'], 2, '.', '')); ?>" min="0" step="0.01"></td>
+                                                    <td><input type="number" class="form-control form-control-sm pos-disc" data-index="<?php echo (int) $idx; ?>" value="<?php echo e(number_format((float) ($item['discount_percent'] ?? 0), 2, '.', '')); ?>" min="0" max="100" step="0.01"></td>
+                                                    <td class="text-end"><?php echo e(formatPrice((float) $item['unit_price'] * (float) $item['quantity'] * (1 - ((float) ($item['discount_percent'] ?? 0) / 100)))); ?></td>
+                                                    <td><button type="button" class="btn btn-sm btn-outline-danger pos-remove" data-index="<?php echo (int) $idx; ?>"><i class="fas fa-times"></i></button></td>
+                                                </tr>
+                                            <?php endforeach; endif; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="d-flex justify-content-between small"><span>Subtotal</span><strong id="posSubtotal"><?php echo e(formatPrice($posSubtotal)); ?></strong></div>
+                                    <div class="d-flex justify-content-between small"><span>Tax (<span id="posTaxPct"><?php echo e(number_format($posTaxRate * 100, 2)); ?>%</span>)</span><strong id="posTax"><?php echo e(formatPrice($posTax)); ?></strong></div>
+                                    <div class="d-flex justify-content-between fs-5 border-top mt-1 pt-2"><span>Total</span><strong id="posTotal"><?php echo e(formatPrice($posTotal)); ?></strong></div>
+
+                                    <div id="posTender" class="border-top pt-3 mt-3">
+                                        <template id="posMethodOptions">
+                                            <?php foreach (($paymentMethodOptions ?? []) as $pmCode => $pmLabel): ?>
+                                            <option value="<?php echo e($pmCode); ?>"
+                                                    data-cash="<?php echo in_array($pmCode, $posCashCodes, true) ? '1' : '0'; ?>"
+                                                    data-gateway="<?php echo e((string) ($posOnlineMethods[$pmCode]['gateway'] ?? '')); ?>"><?php echo e($pmLabel); ?></option>
+                                            <?php endforeach; ?>
+                                        </template>
+                                        <div id="posTenderRows"></div>
+                                        <div class="d-flex flex-wrap gap-2 mb-2">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="posAddTender"><i class="fas fa-plus me-1"></i>Add payment</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="posExact">Exact cash</button>
+                                        </div>
+                                        <div class="d-flex justify-content-between fw-semibold" id="posChangeRow">
+                                            <span>Change due</span><span id="posChange">0.00</span>
+                                        </div>
+                                        <p class="small text-muted mb-2">Split a bill across methods with <em>Add payment</em>. Change is confirmed by the server, not the browser.</p>
+                                        <div id="posOnline" class="alert alert-info py-2 mb-2 d-none">
+                                            <div class="fw-semibold"><i class="fas fa-credit-card me-1"></i>Card payment</div>
+                                            <p class="small mb-2" id="posOnlineText"></p>
+                                            <div class="d-flex flex-wrap gap-2 mb-1">
+                                                <button type="button" class="btn btn-sm btn-primary" id="posOnlineStart"><i class="fas fa-lock me-1"></i>Take card payment</button>
+                                                <a class="btn btn-sm btn-outline-primary d-none" id="posOnlineLink" href="#" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square me-1"></i>Open the payment page</a>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="posOnlineCheck">Ask the gateway again</button>
+                                            </div>
+                                            <div class="small" id="posOnlineStatus"></div>
+                                        </div>
+                                        <div class="d-grid gap-2">
+                                            <button type="button" class="btn btn-primary btn-lg" id="posCheckout" <?php echo ($posCart === [] || $shiftBlocked) ? 'disabled' : ''; ?>>
+                                                <i class="fas fa-check me-2"></i>Complete Sale
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" id="posClear" <?php echo $posCart === [] ? 'disabled' : ''; ?>>Clear Cart</button>
+                                        </div>
+                                    </div>
+
+                                    <div id="posDone" class="alert alert-success d-none">
+                                        <h6 class="mb-1"><i class="fas fa-circle-check me-1"></i>Sale complete</h6>
+                                        <div class="small" id="posDoneDetail"></div>
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            <a class="btn btn-sm btn-success" id="posReceipt" target="_blank" href="#"><i class="fas fa-print me-1"></i>Print receipt</a>
+                                            <button type="button" class="btn btn-sm btn-outline-success" id="posNext">New sale</button>
+                                        </div>
+                                    </div>
+
+                                    <noscript>
+                                        <form action="<?php echo e(url('/sales?action=pos')); ?>" method="POST" class="border-top pt-3 mt-2">
+                                            <?php echo csrf_field(); ?>
+                                            <input type="hidden" name="pos_action" value="checkout">
+                                            <input type="hidden" name="idempotency_key" value="<?php echo e($posIdempotencyKey); ?>">
+                                            <div class="mb-2">
+                                                <label class="form-label">Payment Method</label>
+                                                <select name="payment_method" class="form-select">
+                                                    <?php foreach (($paymentMethodOptions ?? []) as $pmCode => $pmLabel): ?>
+                                                    <option value="<?php echo e($pmCode); ?>"><?php echo e($pmLabel); ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Cash tendered (for change)</label>
+                                                <input type="number" step="0.01" min="0" class="form-control" name="payment_amount">
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Reference</label>
+                                                <input type="text" class="form-control" name="payment_reference">
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Notes</label>
+                                                <textarea class="form-control" name="payment_notes" rows="2"></textarea>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary" <?php echo ($posCart === [] || $shiftBlocked) ? 'disabled' : ''; ?>>
+                                                <i class="fas fa-check me-2"></i>Complete Sale
+                                            </button>
+                                        </form>
+                                        <?php if (($posOnlineMethods ?? []) !== []): ?>
+                                        <form action="<?php echo e(url('/sales?action=pos')); ?>" method="POST" class="border-top pt-2 mt-2">
+                                            <?php echo csrf_field(); ?>
+                                            <input type="hidden" name="pos_action" value="gateway_init">
+                                            <div class="mb-2">
+                                                <label class="form-label">Card payment</label>
+                                                <select name="tender" class="form-select">
+                                                    <?php foreach ($posOnlineMethods as $onlineCode => $onlineMethod): ?>
+                                                    <option value="<?php echo e($onlineCode); ?>"><?php echo e($onlineMethod['name']); ?> (<?php echo e(gatewayProviderLabel($onlineMethod['gateway'])); ?>, <?php echo e($onlineMethod['runtime_mode']); ?>)</option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            <button type="submit" class="btn btn-outline-primary" <?php echo ($posCart === [] || $shiftBlocked) ? 'disabled' : ''; ?>>
+                                                <i class="fas fa-credit-card me-2"></i>Take card payment
+                                            </button>
+                                        </form>
+                                        <?php endif; ?>
+                                        <p class="small text-danger mt-2">Javascript is off, so this is the classic single-payment checkout. Split payments and live totals need Javascript. A card tender is never completed here: the gateway is asked first, and the sale appears only once it confirms the payment.</p>
+                                    </noscript>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="posAlert" class="alert alert-danger mt-3 d-none" role="alert"></div>
+                </div>
+            </div>
+    <!-- Shared line template -->
+    <template id="lineTemplate">
+        <tr>
+            <td>
+                <select name="line_product_id[]" class="form-select form-select-sm line-product" required>
+                    <option value="">-- Select Product --</option>
+                    <?php foreach ($products as $product): ?>
+                    <option value="<?php echo (int) $product['product_id']; ?>" data-price="<?php echo e(number_format((float) ($product['sales_price'] ?? 0), 4, '.', '')); ?>">
+                        <?php echo e($product['name']); ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </td>
+            <td><input type="number" name="line_quantity[]" class="form-control form-control-sm" value="1" min="0.01" step="0.01"></td>
+            <td><input type="number" name="line_unit_price[]" class="form-control form-control-sm line-price" step="0.01" min="0" placeholder="Auto"></td>
+            <td><input type="number" name="line_discount[]" class="form-control form-control-sm" value="0" min="0" max="100" step="0.01"></td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger line-remove"><i class="fas fa-times"></i></button></td>
+        </tr>
+    </template>
+
+    <!-- Record Sale Modal -->
+    <div class="modal fade" id="saleModal" tabindex="-1" aria-labelledby="saleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <form action="<?php echo e(url('/sales?action=sales')); ?>" method="POST">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="action" value="save_sale">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="saleModalLabel">Record Sale</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Customer <span class="text-danger">*</span></label>
+                                <select name="customer_id" class="form-select" required>
+                                    <option value="">-- Select Customer --</option>
+                                    <?php foreach ($customers as $option): ?>
+                                    <option value="<?php echo (int) $option['customer_id']; ?>"><?php echo e($option['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Branch</label>
+                                <select name="branch_id" class="form-select">
+                                    <?php foreach ($branches as $branchOption): ?>
+                                    <option value="<?php echo (int) $branchOption['branch_id']; ?>"><?php echo e($branchOption['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Issue Date</label>
+                                <input type="date" name="issue_date" class="form-control" value="<?php echo e(date('Y-m-d')); ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Due Date</label>
+                                <input type="date" name="due_date" class="form-control" value="<?php echo e(date('Y-m-d', strtotime('+30 days'))); ?>">
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th style="min-width:220px">Product</th><th>Qty</th><th>Unit Price</th><th>Disc %</th><th></th></tr></thead>
+                                <tbody id="saleLines"></tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary js-add-line" data-target="saleLines"><i class="fas fa-plus me-1"></i> Add Line</button>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Discount %</label>
+                                <input type="number" name="discount_percent" class="form-control" value="0" min="0" max="100" step="0.01">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Tax Rate (decimal)</label>
+                                <input type="number" name="tax_rate" class="form-control" value="<?php echo e((string) $defaultTaxRate); ?>" min="0" step="0.0001">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Amount Paid</label>
+                                <input type="number" name="amount_paid" class="form-control" value="0" min="0" step="0.01">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Payment Method</label>
+                                <select name="payment_method" class="form-select">
+                                    <?php foreach (($paymentMethodOptions ?? []) as $pmCode => $pmLabel): ?>
+                                    <option value="<?php echo e($pmCode); ?>"><?php echo e($pmLabel); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Reference</label>
+                                <input type="text" name="reference_number" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Notes</label>
+                                <input type="text" name="sale_notes" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Record Sale</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Quote Modal -->
+    <div class="modal fade" id="quoteModal" tabindex="-1" aria-labelledby="quoteModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <form action="<?php echo e(url('/sales?action=quotes')); ?>" method="POST">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="action" value="save_quote">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="quoteModalLabel">Create Quote</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Customer <span class="text-danger">*</span></label>
+                                <select name="customer_id" class="form-select" required>
+                                    <option value="">-- Select Customer --</option>
+                                    <?php foreach ($customers as $option): ?>
+                                    <option value="<?php echo (int) $option['customer_id']; ?>"><?php echo e($option['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Branch</label>
+                                <select name="branch_id" class="form-select">
+                                    <?php foreach ($branches as $branchOption): ?>
+                                    <option value="<?php echo (int) $branchOption['branch_id']; ?>"><?php echo e($branchOption['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Status</label>
+                                <select name="quote_status" class="form-select">
+                                    <option value="draft">Draft</option>
+                                    <option value="sent">Sent</option>
+                                    <option value="accepted">Accepted</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Tax Rate (decimal)</label>
+                                <input type="number" name="tax_rate" class="form-control" value="<?php echo e((string) $defaultTaxRate); ?>" min="0" step="0.0001">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Issue Date</label>
+                                <input type="date" name="issue_date" class="form-control" value="<?php echo e(date('Y-m-d')); ?>">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Expiry Date</label>
+                                <input type="date" name="expiry_date" class="form-control" value="<?php echo e(date('Y-m-d', strtotime('+30 days'))); ?>">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Discount %</label>
+                                <input type="number" name="discount_percent" class="form-control" value="0" min="0" max="100" step="0.01">
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th style="min-width:220px">Product</th><th>Qty</th><th>Unit Price</th><th>Disc %</th><th></th></tr></thead>
+                                <tbody id="quoteLines"></tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary js-add-line" data-target="quoteLines"><i class="fas fa-plus me-1"></i> Add Line</button>
+                        <div class="mt-3">
+                            <label class="form-label">Notes</label>
+                            <textarea name="quote_notes" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Save Quote</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div class="modal fade" id="customerModal" tabindex="-1" aria-labelledby="customerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <form action="<?php echo e(url('/sales?action=customers')); ?>" method="POST">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="action" value="save_customer">
+                <input type="hidden" name="customer_id" id="customer_id" value="">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="customerModalLabel">Add Customer</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="customer_name" name="customer_name" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="customer_email" name="customer_email">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Phone</label>
+                                <input type="text" class="form-control" id="customer_phone" name="customer_phone">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Address</label>
+                                <input type="text" class="form-control" id="customer_address" name="customer_address">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">City</label>
+                                <input type="text" class="form-control" id="customer_city" name="customer_city">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">State</label>
+                                <input type="text" class="form-control" id="customer_state" name="customer_state">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Postal Code</label>
+                                <input type="text" class="form-control" id="customer_postal" name="customer_postal">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Country</label>
+                                <input type="text" class="form-control" id="customer_country" name="customer_country">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Tax ID</label>
+                                <input type="text" class="form-control" id="customer_tax_id" name="customer_tax_id">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Credit Limit</label>
+                                <input type="number" class="form-control" id="customer_credit_limit" name="customer_credit_limit" value="0" min="0" step="0.01">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Payment Terms</label>
+                                <select class="form-select" id="customer_payment_terms" name="customer_payment_terms">
+                                    <option value="Net 30">Net 30</option>
+                                    <option value="Net 15">Net 15</option>
+                                    <option value="Due on Receipt">Due on Receipt</option>
+                                    <option value="Cash on Delivery">Cash on Delivery</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Notes</label>
+                            <textarea class="form-control" id="customer_notes" name="customer_notes" rows="2"></textarea>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="customer_active" name="customer_active" checked>
+                            <label class="form-check-label" for="customer_active">Active</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="customer_tax_exempt" name="customer_tax_exempt">
+                            <label class="form-check-label" for="customer_tax_exempt">Tax exempt</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Save Customer</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <form action="<?php echo e(url('/sales?action=sales')); ?>" method="POST">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="action" value="record_payment">
+                <input type="hidden" name="sale_id" id="payment_sale_id" value="">
+                <input type="hidden" name="customer_id" id="payment_customer_id" value="">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="paymentModalLabel">Record Payment</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted">Invoice: <strong id="payment_invoice_label"></strong></p>
+                        <div class="mb-3">
+                            <label class="form-label">Amount</label>
+                            <input type="number" name="payment_amount" id="payment_amount" class="form-control" min="0.01" step="0.01" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Method</label>
+                            <select name="payment_method" class="form-select">
+                                <?php foreach ($paymentOptionsBankFirst as $pmCode => $pmLabel): ?>
+                                <option value="<?php echo e($pmCode); ?>"><?php echo e($pmLabel); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Reference</label>
+                            <input type="text" name="payment_reference" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Notes</label>
+                            <textarea name="payment_notes" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Record Payment</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+<?php ob_start(); ?>
+    <?php if ($action === 'pos'): ?>
+    <script src="<?php echo e(asset('js/pos.js')); ?>?v=<?php echo e(APP_VERSION); ?>"></script>
+    <?php endif; ?>
+    <script>
+        (function () {
+            'use strict';
+
+            const template = document.getElementById('lineTemplate');
+
+            function addLine(targetId) {
+                const container = document.getElementById(targetId);
+                if (!container || !template) { return; }
+                const fragment = template.content.cloneNode(true);
+                container.appendChild(fragment);
+            }
+
+            document.querySelectorAll('.js-add-line').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    addLine(button.dataset.target);
+                });
+            });
+
+            document.addEventListener('change', function (event) {
+                if (event.target.classList.contains('line-product')) {
+                    const option = event.target.options[event.target.selectedIndex];
+                    const priceInput = event.target.closest('tr').querySelector('.line-price');
+                    if (priceInput && option && option.dataset.price) {
+                        priceInput.value = parseFloat(option.dataset.price).toFixed(2);
+                    }
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                if (event.target.closest('.line-remove')) {
+                    event.target.closest('tr').remove();
+                }
+            });
+
+            document.querySelectorAll('.js-sale-modal, .js-quote-modal').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    const target = button.classList.contains('js-sale-modal') ? 'saleLines' : 'quoteLines';
+                    if (document.getElementById(target).children.length === 0) {
+                        addLine(target);
+                    }
+                });
+            });
+
+            function setValue(id, value) {
+                const el = document.getElementById(id);
+                if (el) { el.value = value == null ? '' : value; }
+            }
+
+            document.querySelectorAll('.js-edit-customer').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    const d = button.dataset;
+                    setValue('customer_id', d.id);
+                    setValue('customer_name', d.name);
+                    setValue('customer_email', d.email);
+                    setValue('customer_phone', d.phone);
+                    setValue('customer_tax_id', d.tax);
+                    setValue('customer_address', d.address);
+                    setValue('customer_city', d.city);
+                    setValue('customer_state', d.state);
+                    setValue('customer_postal', d.postal);
+                    setValue('customer_country', d.country);
+                    setValue('customer_credit_limit', d.credit);
+                    setValue('customer_payment_terms', d.terms);
+                    setValue('customer_notes', d.notes);
+                    document.getElementById('customer_active').checked = d.active === '1';
+                    document.getElementById('customer_tax_exempt').checked = d.exempt === '1';
+                    document.getElementById('customerModalLabel').textContent = 'Edit Customer';
+                });
+            });
+
+            document.querySelectorAll('.js-add-customer').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    setValue('customer_id', '');
+                    setValue('customer_name', '');
+                    setValue('customer_email', '');
+                    setValue('customer_phone', '');
+                    setValue('customer_tax_id', '');
+                    setValue('customer_address', '');
+                    setValue('customer_city', '');
+                    setValue('customer_state', '');
+                    setValue('customer_postal', '');
+                    setValue('customer_country', '');
+                    setValue('customer_credit_limit', '0');
+                    setValue('customer_payment_terms', 'Net 30');
+                    setValue('customer_notes', '');
+                    document.getElementById('customer_active').checked = true;
+                    document.getElementById('customer_tax_exempt').checked = false;
+                    document.getElementById('customerModalLabel').textContent = 'Add Customer';
+                });
+            });
+
+            document.querySelectorAll('.js-pay-sale').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    const d = button.dataset;
+                    setValue('payment_sale_id', d.id);
+                    setValue('payment_customer_id', d.customer);
+                    setValue('payment_amount', d.amount);
+                    document.getElementById('payment_invoice_label').textContent = d.invoice || '';
+                });
+            });
+        })();
+    </script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

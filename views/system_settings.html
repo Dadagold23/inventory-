@@ -1,0 +1,246 @@
+<?php
+$pageHeading = 'System Settings';
+$pageEyebrow = 'Administration';
+$pageDescription = 'Configure application-wide preferences stored as key/value settings.';
+$activeNav = 'settings';
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <!-- Settings Form -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="fas fa-cog me-2"></i>System Configuration</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="<?php echo e(url('/system_settings?action=manage_settings')); ?>" method="POST" class="needs-validation">
+                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'] ?? ''); ?>">
+                                <input type="hidden" name="action" value="save_setting">
+                                
+                                <div class="table-responsive">
+                                    <table class="table table-foundation mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Setting</th>
+                                                <th>Value</th>
+                                                <th>Type</th>
+                                                <th>Description</th>
+                                                <th>Active</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php 
+                                            foreach (($settings ?? []) as $s): 
+                                            ?>
+                                            <tr>
+                                                <td>
+                                                    <strong><?php echo htmlspecialchars($s['key']); ?></strong>
+                                                    <input type="hidden" name="setting_key[]" value="<?php echo $s['key']; ?>">
+                                                    <input type="hidden" name="setting_id[]" value="<?php echo $s['setting_id']; ?>">
+                                                </td>
+                                                <td>
+                                                    <input type="text" class="form-control" name="setting_value[]" value="<?php echo htmlspecialchars($s['value'] ?? ''); ?>" required>
+                                                </td>
+                                                <td>
+                                                    <select class="form-select" name="value_type[]">
+                                                        <option value="string" <?php echo ($s['value_type'] ?? 'string') === 'string' ? 'selected' : ''; ?>>String</option>
+                                                        <option value="number" <?php echo ($s['value_type'] ?? 'string') === 'number' ? 'selected' : ''; ?>>Number</option>
+                                                        <option value="boolean" <?php echo ($s['value_type'] ?? 'string') === 'boolean' ? 'selected' : ''; ?>>Boolean</option>
+                                                        <option value="json" <?php echo ($s['value_type'] ?? 'string') === 'json' ? 'selected' : ''; ?>>JSON</option>
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <input type="text" class="form-control" name="setting_description[]" value="<?php echo htmlspecialchars($s['description'] ?? ''); ?>">
+                                                </td>
+                                                <td>
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox" id="is_active_<?php echo $s['setting_id']; ?>" name="is_active[<?php echo (int) $s['setting_id']; ?>]" value="1" <?php echo ($s['is_active'] ?? 1) ? 'checked' : ''; ?>>
+                                                        <label class="form-check-label" for="is_active_<?php echo $s['setting_id']; ?>">Yes</label>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"
+                                                            name="delete_key" value="<?php echo htmlspecialchars($s['key']); ?>"
+                                                            formnovalidate data-confirm="Delete this setting?">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <h6>Add New Setting</h6>
+                                    <div class="row mb-3">
+                                        <div class="col-6">
+                                            <label for="new_key" class="form-label">Key <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="new_key" name="new_key" required>
+                                        </div>
+                                        <div class="col-6">
+                                            <label for="new_value" class="form-label">Value <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="new_value" name="new_value" required>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-6">
+                                            <label for="new_value_type" class="form-label">Type</label>
+                                            <select class="form-select" id="new_value_type" name="new_value_type">
+                                                <option value="string">String</option>
+                                                <option value="number">Number</option>
+                                                <option value="boolean">Boolean</option>
+                                                <option value="json">JSON</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label for="new_description" class="form-label">Description</label>
+                                            <input type="text" class="form-control" id="new_description" name="new_description">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save me-2"></i> Add/Update Setting</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Application Settings (settings table) -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="fas fa-sliders-h me-2"></i>Application Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-3">
+                                These values drive module behaviour (precision, defaults, approval policy).
+                            </p>
+                            <form action="<?php echo e(url('/system_settings?action=list')); ?>" method="POST">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_app_settings">
+                                <div class="row g-3">
+                                    <?php foreach (($appSettingDefs ?? []) as $key => $def): ?>
+                                        <?php $current = (string) ($appSettings[$key] ?? $def['default']); ?>
+                                        <div class="col-12 col-md-6 col-lg-4">
+                                            <label class="form-label" for="app_<?php echo e($key); ?>">
+                                                <?php echo e($def['label']); ?>
+                                            </label>
+                                            <?php if ($def['type'] === 'bool'): ?>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="app_<?php echo e($key); ?>"
+                                                           name="app_settings[<?php echo e($key); ?>]" value="1"
+                                                           <?php echo $current === '1' ? 'checked' : ''; ?>>
+                                                    <label class="form-check-label small text-muted" for="app_<?php echo e($key); ?>">Enabled</label>
+                                                </div>
+                                            <?php elseif ($def['type'] === 'select'): ?>
+                                                <select class="form-select" id="app_<?php echo e($key); ?>" name="app_settings[<?php echo e($key); ?>]">
+                                                    <?php foreach ($def['options'] as $optValue => $optLabel): ?>
+                                                        <option value="<?php echo e((string) $optValue); ?>" <?php echo $current === (string) $optValue ? 'selected' : ''; ?>>
+                                                            <?php echo e((string) $optLabel); ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            <?php else: ?>
+                                                <input class="form-control" id="app_<?php echo e($key); ?>"
+                                                       name="app_settings[<?php echo e($key); ?>]"
+                                                       type="<?php echo $def['type'] === 'int' || $def['type'] === 'float' ? 'number' : 'text'; ?>"
+                                                       value="<?php echo e($current); ?>"
+                                                       <?php if (isset($def['min'])): ?>min="<?php echo e((string) $def['min']); ?>"<?php endif; ?>
+                                                       <?php if (isset($def['max'])): ?>max="<?php echo e((string) $def['max']); ?>"<?php endif; ?>
+                                                       <?php if ($def['type'] === 'float'): ?>step="0.01"<?php endif; ?>>
+                                            <?php endif; ?>
+                                            <?php if (!empty($def['description'])): ?>
+                                                <div class="form-text"><?php echo e($def['description']); ?></div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <button type="submit" class="btn btn-primary mt-3"><i class="fas fa-save me-2"></i>Save Application Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Receipt printer: the mark at the head of every slip -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="fas fa-receipt me-2"></i>Receipt Logo</h5>
+                        </div>
+                        <div class="card-body">
+                            <?php
+                            $receiptLogoSettings = receiptSettings($pdo, $companyId);
+                            $receiptLogoFile = receiptLogoFile($receiptLogoSettings);
+                            ?>
+                            <p class="text-muted small mb-3">
+                                Uploaded as any common picture, kept as a JPEG flattened to tones of gray inside
+                                <code>storage/uploads/logos/</code> — which is not reachable over HTTP. The receipt
+                                page and the PDF carry it inline, so a slip never needs a second request to print
+                                its own header. The file is re-drawn from pixels, so anything a PNG, GIF, WebP or
+                                SVG was hiding is not stored.
+                            </p>
+                            <div class="row g-4 align-items-start">
+                                <div class="col-12 col-md-6">
+                                    <form action="<?php echo e(url('/system_settings?action=list')); ?>" method="POST" enctype="multipart/form-data">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="save_receipt_logo">
+                                        <label class="form-label" for="receipt_logo">Picture (PNG, JPEG, GIF, WebP or BMP, up to 2 MB)</label>
+                                        <input class="form-control" type="file" id="receipt_logo" name="receipt_logo" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" required>
+                                        <button type="submit" class="btn btn-primary mt-3"><i class="fas fa-upload me-2"></i>Upload logo</button>
+                                    </form>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="border rounded p-3 text-center bg-white">
+                                        <?php if ($receiptLogoFile !== null): ?>
+                                            <img src="<?php echo e(receiptLogoDataUri($receiptLogoFile)); ?>" alt="Current receipt logo"
+                                                 style="max-width:100%;max-height:120px;">
+                                            <div class="small text-muted mt-2"><?php echo e(basename($receiptLogoFile)); ?></div>
+                                            <form action="<?php echo e(url('/system_settings?action=list')); ?>" method="POST" class="mt-2">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="remove_receipt_logo">
+                                                <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i>Remove logo</button>
+                                            </form>
+                                        <?php else: ?>
+                                            <div class="text-muted small">
+                                                No logo is printed.
+                                                <?php echo $receiptLogoSettings['show_logo'] ? '' : '(Upload one and turn <em>Print the receipt logo</em> on.)'; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="small text-muted mt-2">
+                                        Slips are laid out for <?php echo (int) $receiptLogoSettings['width']; ?> mm paper
+                                        and print the footer message above.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+<?php ob_start(); ?>
+<script>
+    // Initialize: populate settings on load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Form validation
+        (function () {
+            'use strict';
+            const forms = document.querySelectorAll('.needs-validation');
+            Array.from(forms).forEach(function(form) {
+                form.addEventListener('submit', function(event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                });
+            });
+        })();
+    });
+</script>
+<?php $pageScripts = ob_get_clean(); require APP_ROOT . '/views/layout/footer.php'; ?>

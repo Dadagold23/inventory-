@@ -1,0 +1,324 @@
+<?php
+/**
+ * Barcode workspace view: scan tester, per-product code management,
+ * bulk label printing and SVG download.
+ */
+$pageHeading = 'Barcodes';
+$pageEyebrow = 'Product identity codes, labels and scanning';
+$pageDescription = 'Internal codes use the GS1 in-store range (2xx) so they can never be mistaken for supplier EAN/UPC codes.';
+$activeNav = 'barcodes';
+
+$pageActions = '<span class="badge bg-secondary align-self-center">' . count($products) . ' listed</span>'
+    . ($missingCodes > 0
+        ? '<span class="badge bg-warning text-dark align-self-center">' . $missingCodes . ' without a code</span>'
+        : '<span class="badge bg-success align-self-center">all products coded</span>');
+
+require APP_ROOT . '/views/layout/header.php';
+?>
+            <?php if (!empty($_SESSION['auth_message'])): ?>
+            <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <?php echo e($_SESSION['auth_message']); unset($_SESSION['auth_message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            <?php endif; ?>
+
+            <!-- ================= Scan tester ================= -->
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header fw-semibold"><i class="bi bi-upc-scan me-1"></i>Scan / entry test</div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label" for="scanInput">Barcode, SKU or internal ID</label>
+                            <input class="form-control font-monospace" id="scanInput" autocomplete="off"
+                                   placeholder="Scan here or type the code, then press Enter">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div id="scanResult" class="small text-muted">Resolver order: primary barcode → SKU → product ID → alternate codes.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= Selected product ================= -->
+            <?php if ($focus): ?>
+            <div class="card border-0 shadow-sm mt-4" id="add-code">
+                <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+                    <span>Codes for <?php echo e($focus['name']); ?> <span class="text-muted">(SKU <?php echo e($focus['sku'] ?? ''); ?>)</span></span>
+                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/barcodes?action=manage')); ?>">Clear</a>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-12 col-lg-5">
+                            <?php if (!empty($focus['barcode'])): ?>
+                            <img class="img-fluid border rounded p-2 bg-white" alt="Barcode for <?php echo e($focus['name']); ?>"
+                                 src="<?php echo e(url('/barcodes?action=svg&product_id=' . (int) $focus['product_id'] . '&type=' . $symbology)); ?>">
+                            <div class="d-flex flex-wrap gap-2 mt-2">
+                                <a class="btn btn-sm btn-outline-primary" download
+                                   href="<?php echo e(url('/barcodes?action=svg&product_id=' . (int) $focus['product_id'] . '&type=' . $symbology . '&download=1')); ?>">
+                                    <i class="bi bi-download me-1"></i>Download SVG
+                                </a>
+                                <a class="btn btn-sm btn-outline-primary" target="_blank"
+                                   href="<?php echo e(url('/barcodes?action=labels&ids=' . (int) $focus['product_id'] . '&paper=58&type=' . $symbology)); ?>">
+                                    <i class="bi bi-printer me-1"></i>Print label (58 mm)
+                                </a>
+                                <a class="btn btn-sm btn-outline-primary" target="_blank"
+                                   href="<?php echo e(url('/barcodes?action=labels&ids=' . (int) $focus['product_id'] . '&paper=80&type=' . $symbology)); ?>">
+                                    <i class="bi bi-printer me-1"></i>Print label (80 mm)
+                                </a>
+                            </div>
+                            <?php else: ?>
+                            <p class="text-warning">This product has no primary code yet.</p>
+                            <form method="POST" action="<?php echo e(url('/barcodes')); ?>">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="ensure_code">
+                                <input type="hidden" name="product_id" value="<?php echo (int) $focus['product_id']; ?>">
+                                <button class="btn btn-sm btn-warning" type="submit">
+                                    <i class="bi bi-plus-slash-minus me-1"></i>Allocate internal barcode
+                                </button>
+                            </form>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-12 col-lg-7">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr><th>Code</th><th>Symbology</th><th>Origin</th><th class="text-end">Actions</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($focusCodes as $codeRow): ?>
+                                        <?php $isPrimary = (string) $codeRow['code'] === (string) $focus['barcode']; ?>
+                                        <tr>
+                                            <td class="font-monospace">
+                                                <?php echo e($codeRow['code']); ?>
+                                                <?php if ($isPrimary): ?><span class="badge bg-primary ms-1">primary</span><?php endif; ?>
+                                            </td>
+                                            <td><span class="badge bg-light text-dark"><?php echo e($codeRow['symbology']); ?></span></td>
+                                            <td class="small text-muted"><?php echo e($codeRow['source']); ?></td>
+                                            <td class="text-end">
+                                                <div class="btn-group btn-group-sm">
+                                                    <?php if (!$isPrimary): ?>
+                                                    <form method="POST" action="<?php echo e(url('/barcodes')); ?>" class="d-inline">
+                                                        <?php echo csrf_field(); ?>
+                                                        <input type="hidden" name="action" value="set_primary">
+                                                        <input type="hidden" name="product_id" value="<?php echo (int) $focus['product_id']; ?>">
+                                                        <input type="hidden" name="barcode_id" value="<?php echo (int) $codeRow['barcode_id']; ?>">
+                                                        <button class="btn btn-outline-primary" title="Make this the printed primary code">Set primary</button>
+                                                    </form>
+                                                    <form method="POST" action="<?php echo e(url('/barcodes')); ?>" class="d-inline"
+                                                          onsubmit="return confirm('Remove this alternate code?');">
+                                                        <?php echo csrf_field(); ?>
+                                                        <input type="hidden" name="action" value="delete_code">
+                                                        <input type="hidden" name="product_id" value="<?php echo (int) $focus['product_id']; ?>">
+                                                        <input type="hidden" name="barcode_id" value="<?php echo (int) $codeRow['barcode_id']; ?>">
+                                                        <button class="btn btn-outline-danger" title="Remove alternate code"><i class="bi bi-trash"></i></button>
+                                                    </form>
+                                                    <?php else: ?>
+                                                    <span class="text-muted small">assigned first, cannot remove</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                        <?php if (!$focusCodes): ?>
+                                        <tr><td colspan="4" class="text-muted small">No rows in the alternate-code table yet.</td></tr>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <form method="POST" action="<?php echo e(url('/barcodes')); ?>" class="row g-2 mt-3">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="save_code">
+                                <input type="hidden" name="product_id" value="<?php echo (int) $focus['product_id']; ?>">
+                                <div class="col-12 col-md-7">
+                                    <label class="form-label small mb-1" for="newCode">Attach another scannable code</label>
+                                    <input class="form-control font-monospace" id="newCode" name="code" required maxlength="60"
+                                           placeholder="EAN-13, EAN-8, UPC or Code 128 text">
+                                </div>
+                                <div class="col-12 col-md-3">
+                                    <label class="form-label small mb-1" for="codeSource">Origin</label>
+                                    <select class="form-select" id="codeSource" name="source">
+                                        <option value="gs1">Supplier / GS1 allocated</option>
+                                        <option value="manual">Manual / in-store</option>
+                                        <option value="import">Imported</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-2 d-flex align-items-end">
+                                    <button class="btn btn-primary w-100" type="submit">Attach</button>
+                                </div>
+                                <div class="col-12">
+                                    <div class="form-text">
+                                        EAN-13/EAN-8 are validated against their check digit before they are stored.
+                                        A code already owned by another product is refused.
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- ================= Bulk toolbar ================= -->
+            <form method="GET" action="<?php echo e(url('/barcodes')); ?>" id="bulkForm" class="card border-0 shadow-sm mt-4">
+                <input type="hidden" name="action" value="labels">
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1" for="paperSel">Label size</label>
+                            <select class="form-select form-select-sm" id="paperSel" name="paper">
+                                <?php foreach ($labelPresets as $key => $preset): ?>
+                                <option value="<?php echo e($key); ?>" <?php echo $key === $presetKey ? 'selected' : ''; ?>>
+                                    <?php echo e($preset['desc']); ?> · <?php echo e((string) $preset['width']); ?>×<?php echo e((string) $preset['height']); ?> mm
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1" for="typeSel">Symbology</label>
+                            <select class="form-select form-select-sm" id="typeSel" name="type">
+                                <?php foreach ($symbologyChoices as $key => $label): ?>
+                                <option value="<?php echo e($key); ?>" <?php echo $key === $symbology ? 'selected' : ''; ?>><?php echo e($label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-1" for="copiesSel">Copies each</label>
+                            <input class="form-control form-control-sm" id="copiesSel" name="copies" type="number" min="1" max="99" value="1">
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-1" for="priceSel">Show price</label>
+                            <select class="form-select form-select-sm" id="priceSel" name="price">
+                                <option value="1">Yes</option>
+                                <option value="0">No</option>
+                            </select>
+                        </div>
+                        <div class="col-8 col-md-2 d-flex gap-2">
+                            <button class="btn btn-primary btn-sm w-100" type="submit">
+                                <i class="bi bi-printer me-1"></i>Print
+                            </button>
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <button class="btn btn-outline-primary btn-sm w-100" formaction="<?php echo e(url('/barcodes?action=pack')); ?>">
+                                <i class="bi bi-file-zip me-1"></i>Download .zip
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-text">Tick products in the table below, then print or download. The selection is sent as <code>ids[]</code>.</div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <!-- ================= Product list ================= -->
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header fw-semibold d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                    <span>Products</span>
+                    <form method="GET" action="<?php echo e(url('/barcodes')); ?>" class="d-flex gap-2">
+                        <input type="hidden" name="action" value="manage">
+                        <input class="form-control form-control-sm" name="q" value="<?php echo e($search); ?>" placeholder="Search name, SKU or code">
+                        <button class="btn btn-sm btn-outline-primary" type="submit">Search</button>
+                    </form>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="width:2rem"><input class="form-check-input" type="checkbox" id="checkAll" aria-label="Select all"></th>
+                                    <th>Product</th>
+                                    <th>SKU</th>
+                                    <th>Primary code</th>
+                                    <th>Codes</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($products as $row): ?>
+                                <?php $pid = (int) $row['product_id']; ?>
+                                <tr>
+                                    <td><input class="form-check-input bulk-check" form="bulkForm" type="checkbox" name="ids[]" value="<?php echo $pid; ?>"></td>
+                                    <td>
+                                        <?php echo e($row['name']); ?>
+                                        <?php if (empty($row['is_active'])): ?><span class="badge bg-secondary ms-1">Inactive</span><?php endif; ?>
+                                    </td>
+                                    <td class="small"><?php echo e($row['sku'] ?? ''); ?></td>
+                                    <td class="font-monospace small">
+                                        <?php if (!empty($row['barcode'])): ?>
+                                            <?php echo e($row['barcode']); ?>
+                                            <?php if (str_starts_with((string) $row['barcode'], '2')): ?>
+                                            <span class="badge bg-info text-dark ms-1" title="GS1 in-store range (internal use)">internal</span>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                        <span class="badge bg-warning text-dark">unallocated</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><span class="badge bg-light text-dark"><?php echo (int) $row['code_count']; ?></span></td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a class="btn btn-outline-primary" href="<?php echo e(url('/barcodes?product_id=' . $pid)); ?>">Manage</a>
+                                            <a class="btn btn-outline-secondary" target="_blank" title="Print one label"
+                                               href="<?php echo e(url('/barcodes?action=labels&ids=' . $pid . '&paper=' . $presetKey . '&type=' . $symbology)); ?>">
+                                                <i class="bi bi-printer"></i>
+                                            </a>
+                                            <?php if (!empty($row['barcode'])): ?>
+                                            <a class="btn btn-outline-secondary" download title="Download SVG"
+                                               href="<?php echo e(url('/barcodes?action=svg&product_id=' . $pid . '&type=' . $symbology . '&download=1')); ?>">
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                                <?php if (!$products): ?>
+                                <tr><td colspan="6" class="text-muted p-4">No products match this search.</td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+            (function () {
+                const lookupUrl = <?php echo json_encode(url('/barcodes?action=lookup')); ?>;
+                const input = document.getElementById('scanInput');
+                const out = document.getElementById('scanResult');
+                input.addEventListener('keydown', async function (ev) {
+                    if (ev.key !== 'Enter') { return; }
+                    ev.preventDefault();
+                    const code = input.value.trim();
+                    if (!code) { return; }
+                    out.textContent = 'Looking up…';
+                    out.className = 'small text-muted';
+                    try {
+                        const res = await fetch(lookupUrl + '&code=' + encodeURIComponent(code), { headers: { 'Accept': 'application/json' } });
+                        const data = await res.json();
+                        if (data.ok) {
+                            out.className = 'small text-success';
+                            out.innerHTML = 'Matched <strong></strong> · <span class="font-monospace"></span> · price <span class="fx"></span> · on hand <span class="oh"></span> · via <span class="via"></span>';
+                            out.querySelector('strong').textContent = data.name;
+                            out.querySelector('.font-monospace').textContent = data.sku || data.barcode || ('#' + data.product_id);
+                            out.querySelector('.fx').textContent = Number(data.price).toFixed(2);
+                            out.querySelector('.oh').textContent = Number(data.on_hand).toFixed(2);
+                            out.querySelector('.via').textContent = data.matched_by;
+                        } else {
+                            out.className = 'small text-danger';
+                            out.textContent = data.message || 'No match.';
+                        }
+                    } catch (err) {
+                        out.className = 'small text-danger';
+                        out.textContent = 'Lookup failed: ' + err.message;
+                    }
+                });
+
+                const checkAll = document.getElementById('checkAll');
+                if (checkAll) {
+                    checkAll.addEventListener('change', function () {
+                        document.querySelectorAll('.bulk-check').forEach(function (cb) { cb.checked = checkAll.checked; });
+                    });
+                }
+            })();
+            </script>
+<?php require APP_ROOT . '/views/layout/footer.php'; ?>

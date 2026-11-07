@@ -1,0 +1,462 @@
+<?php
+/**
+ * Printable sales receipt (Phase E).
+ *
+ * Rendered from the receiptPayload() array alone - see includes/receipt_functions.php.
+ * $receiptWidth is chosen from a whitelist in sales.php, so it is safe to drop
+ * into the CSS: 58 mm and 80 mm are the same slip at two paper widths.
+ */
+$receiptWidth = (int) ($receipt['print']['width'] ?? 80);
+$receiptCompanyName = (string) $receipt['company']['name'];
+$receiptAddress = (string) $receipt['company']['address'];
+$receiptPhone = (string) $receipt['company']['phone'];
+$receiptEmail = (string) $receipt['company']['email'];
+$receiptTaxId = (string) $receipt['company']['tax_id'];
+$receiptCurrency = (string) $receipt['company']['currency'];
+$receiptBranchName = (string) $receipt['branch'];
+$receiptCustomer = (string) $receipt['customer'];
+$receiptNumber = (string) $receipt['number'];
+$receiptCashier = (string) $receipt['cashier'];
+$receiptIsReprint = (bool) $receipt['print']['reprint'];
+$receiptLogo = (string) $receipt['print']['logo_uri'];
+$receiptFooter = (string) $receipt['print']['footer'];
+$receiptTenders = $receipt['tenders'];
+$receiptSummary = $receipt['summary'];
+$receiptLines = $receipt['lines'];
+$receiptStatus = (string) $receipt['status'];
+$receiptStatusLabel = receiptStatusLabel($receiptStatus);
+$receiptIssued = date('M d, Y g:i A', strtotime($receipt['issued_at']));
+$receiptMoney = static fn ($value): string => number_format((float) $value, 2);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receipt <?php echo e($receiptNumber); ?> - <?php echo e($receiptCompanyName); ?></title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #111;
+            --muted: #555;
+            --line: #b8b8b8;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 28px 16px 40px;
+            background: #e8e8e8;
+            color: var(--ink);
+            font-family: "Courier New", Courier, monospace;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        body.paper-58 { font-size: 11px; }
+        .receipt-actions {
+            width: <?php echo $receiptWidth; ?>mm;
+            max-width: 100%;
+            margin: 0 auto 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .receipt-actions button,
+        .receipt-actions a {
+            flex: 1 1 auto;
+            padding: 9px 12px;
+            border: 1px solid #1b1b1b;
+            border-radius: 4px;
+            background: #1b1b1b;
+            color: #fff;
+            font: inherit;
+            font-weight: 700;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .receipt-actions a {
+            background: #fff;
+            color: #1b1b1b;
+        }
+        .receipt-width {
+            width: <?php echo $receiptWidth; ?>mm;
+            max-width: 100%;
+            margin: 0 auto 10px;
+            font-size: 11px;
+            color: #333;
+            display: flex;
+            gap: 10px;
+            align-items: baseline;
+            flex-wrap: wrap;
+        }
+        .receipt-width strong { font-size: 11px; letter-spacing: .04em; }
+        .receipt-width a { color: #1b1b1b; }
+        .receipt-width .chosen { text-decoration: none; font-weight: 700; }
+        .receipt {
+            width: <?php echo $receiptWidth; ?>mm;
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 6mm 5mm;
+            background: #fff;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+        }
+        .receipt-logo {
+            display: block;
+            max-width: 100%;
+            max-height: 18mm;
+            margin: 0 auto 3mm;
+        }
+        .receipt h1 {
+            margin: 0 0 2mm;
+            font-size: 17px;
+            line-height: 1.2;
+            letter-spacing: 0.04em;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        body.paper-58 .receipt h1 { font-size: 14px; }
+        .receipt .shop-details {
+            margin: 0;
+            font-size: 11px;
+            line-height: 1.4;
+            text-align: center;
+        }
+        body.paper-58 .receipt .shop-details { font-size: 9.5px; }
+        .receipt .shop-details span { display: block; }
+        .receipt .receipt-title {
+            margin: 4mm 0 3mm;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        .receipt .reprint-flag {
+            display: block;
+            margin-top: 1mm;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-align: center;
+        }
+        .receipt .divider {
+            margin: 3mm 0;
+            border: 0;
+            border-top: 1px dashed var(--line);
+        }
+        .receipt .meta {
+            display: grid;
+            grid-template-columns: 24mm 1fr;
+            gap: 1mm 2mm;
+            font-size: 11.5px;
+        }
+        body.paper-58 .receipt .meta { grid-template-columns: 18mm 1fr; font-size: 9.5px; }
+        .receipt .meta dt { color: var(--muted); }
+        .receipt .meta dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+        .receipt-lines {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11.5px;
+            table-layout: fixed;
+        }
+        body.paper-58 .receipt-lines { font-size: 9.5px; }
+        .receipt-lines th {
+            padding: 0 0 1.5mm;
+            border-bottom: 1px solid var(--ink);
+            font-size: 10px;
+            letter-spacing: 0.06em;
+            text-align: left;
+            text-transform: uppercase;
+        }
+        .receipt-lines td {
+            padding: 1.8mm 0 0;
+            vertical-align: top;
+        }
+        .receipt-lines .item { width: 42%; overflow-wrap: anywhere; }
+        .receipt-lines .qty { width: 14%; }
+        .receipt-lines .price { width: 22%; }
+        .receipt-lines .line-total { width: 22%; }
+        .receipt-lines .num { text-align: right; }
+        .receipt-lines .figures { display: none; }
+        .receipt-lines .line-note {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+        }
+        /* 58 mm cannot hold four columns: the item takes a line of its own and
+           the numbers sit under it, which is how a compact slip is read. */
+        body.paper-58 .receipt-lines thead { display: none; }
+        body.paper-58 .receipt-lines,
+        body.paper-58 .receipt-lines tbody,
+        body.paper-58 .receipt-lines tr,
+        body.paper-58 .receipt-lines td { display: block; width: 100%; }
+        body.paper-58 .receipt-lines tr { padding: 1.2mm 0; border-bottom: 1px dotted #ddd; }
+        body.paper-58 .receipt-lines .item { padding: 0; }
+        body.paper-58 .receipt-lines .qty,
+        body.paper-58 .receipt-lines .price,
+        body.paper-58 .receipt-lines .line-total { display: none; }
+        body.paper-58 .receipt-lines .figures {
+            display: flex;
+            justify-content: space-between;
+            gap: 2mm;
+            color: var(--muted);
+        }
+        body.paper-58 .receipt-lines .figures .line-total {
+            display: block;
+            color: var(--ink);
+            font-weight: 700;
+        }
+        .receipt-summary {
+            margin-top: 3mm;
+            font-size: 12px;
+        }
+        body.paper-58 .receipt-summary { font-size: 10px; }
+        .receipt-summary .row,
+        .receipt-payment .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 4mm;
+            padding: 0.6mm 0;
+        }
+        .receipt-summary .grand-total {
+            margin-top: 1.5mm;
+            padding-top: 1.5mm;
+            border-top: 1px solid var(--ink);
+            font-size: 15px;
+            font-weight: 700;
+        }
+        body.paper-58 .receipt-summary .grand-total { font-size: 12px; }
+        .receipt-payment { margin-top: 3mm; font-size: 11.5px; }
+        body.paper-58 .receipt-payment { font-size: 9.5px; }
+        .receipt-payment .tender-group { margin-bottom: 1.5mm; }
+        .receipt-payment .tender-note {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+            padding-left: 3mm;
+        }
+        .receipt-payment .balance-due,
+        .receipt-payment .change-due { font-weight: 700; }
+        .receipt-payment .change-due {
+            border-top: 1px solid var(--ink);
+            margin-top: 1.5mm;
+            padding-top: 1.5mm;
+        }
+        .receipt-status {
+            margin-top: 3mm;
+            padding: 1.5mm 2mm;
+            border: 1px solid var(--ink);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        .receipt-status.cancelled { border-width: 2px; }
+        .receipt-thanks {
+            margin: 5mm 0 0;
+            font-size: 12px;
+            font-weight: 700;
+            text-align: center;
+        }
+        body.paper-58 .receipt-thanks { font-size: 10px; }
+        .receipt-footnote {
+            margin: 1.5mm 0 0;
+            color: var(--muted);
+            font-size: 9.5px;
+            text-align: center;
+        }
+        .receipt-trace {
+            margin: 3mm 0 0;
+            color: var(--muted);
+            font-size: 8.5px;
+            text-align: center;
+            letter-spacing: 0.03em;
+        }
+        @page { size: <?php echo $receiptWidth; ?>mm auto; margin: 0; }
+        @media print {
+            body { padding: 0; background: #fff; }
+            .receipt-actions,
+            .receipt-width { display: none !important; }
+            .receipt {
+                width: <?php echo $receiptWidth; ?>mm;
+                margin: 0;
+                padding: 3mm 4mm;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body class="paper-<?php echo $receiptWidth; ?>" data-autoprint="<?php echo $receiptAutoPrint ? '1' : '0'; ?>"
+      data-receipt-width="<?php echo $receiptWidth; ?>">
+    <div class="receipt-actions">
+        <button type="button" onclick="window.print()">Print receipt</button>
+        <a href="<?php echo e(url('/sales?action=receipt&sale_id=' . (int) $receipt['sale_id'] . '&format=pdf&width=' . $receiptWidth)); ?>">Download PDF</a>
+        <a href="<?php echo e(url('/sales?action=pos')); ?>">New sale</a>
+        <a href="<?php echo e(url('/sales?action=sales')); ?>">Sales history</a>
+    </div>
+
+    <div class="receipt-width">
+        <strong>Paper</strong>
+        <?php foreach (array_keys($receiptWidths ?? receiptPaperWidths()) as $choice): ?>
+            <a class="<?php echo (int) $choice === $receiptWidth ? 'chosen' : ''; ?>"
+               href="<?php echo e(url('/sales?action=receipt&sale_id=' . (int) $receipt['sale_id'] . '&width=' . (int) $choice)); ?>">
+                <?php echo e($choice); ?> mm<?php echo (int) $choice === $receiptWidth ? ' ✓' : ''; ?>
+            </a>
+        <?php endforeach; ?>
+    </div>
+
+    <main class="receipt" aria-label="Sales receipt">
+        <?php if ($receiptLogo !== ''): ?>
+        <img class="receipt-logo" alt="" src="<?php echo e($receiptLogo); ?>">
+        <?php endif; ?>
+
+        <h1><?php echo e($receiptCompanyName); ?></h1>
+        <div class="shop-details">
+            <?php if ($receiptAddress !== ''): ?><span><?php echo nl2br(e($receiptAddress)); ?></span><?php endif; ?>
+            <?php if ($receiptPhone !== ''): ?><span>Tel: <?php echo e($receiptPhone); ?></span><?php endif; ?>
+            <?php if ($receiptEmail !== ''): ?><span><?php echo e($receiptEmail); ?></span><?php endif; ?>
+            <?php if ($receiptTaxId !== ''): ?><span>Tax ID: <?php echo e($receiptTaxId); ?></span><?php endif; ?>
+            <?php if ($receiptCurrency !== ''): ?><span>Currency: <?php echo e($receiptCurrency); ?></span><?php endif; ?>
+        </div>
+
+        <div class="receipt-title">
+            Sales Receipt
+            <?php if ($receiptIsReprint): ?><span class="reprint-flag">** reprint **</span><?php endif; ?>
+        </div>
+
+        <dl class="meta">
+            <dt>Receipt no.</dt>
+            <dd><?php echo e($receiptNumber); ?></dd>
+            <dt>Date</dt>
+            <dd><?php echo e($receiptIssued); ?></dd>
+            <dt>Cashier</dt>
+            <dd><?php echo e($receiptCashier !== '' ? $receiptCashier : '—'); ?></dd>
+            <?php if ($receiptBranchName !== ''): ?>
+            <dt>Branch</dt>
+            <dd><?php echo e($receiptBranchName); ?></dd>
+            <?php endif; ?>
+            <dt>Customer</dt>
+            <dd><?php echo e($receiptCustomer); ?></dd>
+            <?php if ((string) $receipt['reference'] !== ''): ?>
+            <dt>Reference</dt>
+            <dd><?php echo e($receipt['reference']); ?></dd>
+            <?php endif; ?>
+        </dl>
+
+        <hr class="divider">
+
+        <table class="receipt-lines">
+            <thead>
+                <tr>
+                    <th class="item">Item</th>
+                    <th class="qty num">Qty</th>
+                    <th class="price num">Price</th>
+                    <th class="line-total num">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($receiptLines as $receiptItem): ?>
+                <tr>
+                    <td class="item">
+                        <?php echo e($receiptItem['description']); ?>
+                        <?php if ($receiptItem['sku'] !== ''): ?>
+                        <span class="line-note">[<?php echo e($receiptItem['sku']); ?>]</span>
+                        <?php endif; ?>
+                        <?php if ((float) $receiptItem['discount'] > 0): ?>
+                        <span class="line-note">Discount: -<?php echo e($receiptMoney($receiptItem['discount'])); ?></span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="qty num"><?php echo e($receiptMoney($receiptItem['quantity'])); ?></td>
+                    <td class="price num"><?php echo e($receiptMoney($receiptItem['unit_price'])); ?></td>
+                    <td class="line-total num"><?php echo e($receiptMoney($receiptItem['line_total'])); ?></td>
+                    <td class="figures" aria-hidden="true">
+                        <span><?php echo e(rtrim(rtrim(number_format((float) $receiptItem['quantity'], 2), '0'), '.')); ?> x <?php echo e($receiptMoney($receiptItem['unit_price'])); ?></span>
+                        <span class="line-total num"><?php echo e($receiptMoney($receiptItem['line_total'])); ?></span>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                <?php if ($receiptLines === []): ?>
+                <tr><td colspan="4" class="num">No line items recorded.</td></tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+
+        <hr class="divider">
+
+        <div class="receipt-summary">
+            <div class="row"><span>Subtotal</span><strong><?php echo e($receiptMoney($receiptSummary['subtotal'])); ?></strong></div>
+            <?php if ((float) $receiptSummary['discount'] > 0): ?>
+            <div class="row"><span>Discount</span><strong>-<?php echo e($receiptMoney($receiptSummary['discount'])); ?></strong></div>
+            <?php endif; ?>
+            <?php if ((float) $receiptSummary['tax'] > 0): ?>
+            <div class="row"><span>Tax</span><strong><?php echo e($receiptMoney($receiptSummary['tax'])); ?></strong></div>
+            <?php endif; ?>
+            <div class="row grand-total"><span>Total</span><span><?php echo e($receiptMoney($receiptSummary['total'])); ?></span></div>
+        </div>
+
+        <div class="receipt-payment">
+            <?php if ($receiptTenders !== []): ?>
+                <div class="tender-group">
+                    <div class="row"><span><?php echo e($receiptTenders[0]['label'] . ' received'); ?></span>
+                        <span><?php echo e($receiptMoney($receiptTenders[0]['applied'])); ?></span></div>
+                </div>
+                <?php foreach (array_slice($receiptTenders, 1) as $extraTender): ?>
+                <div class="tender-group">
+                    <div class="row"><span><?php echo e($extraTender['label'] . ' received'); ?></span>
+                        <span><?php echo e($receiptMoney($extraTender['applied'])); ?></span></div>
+                </div>
+                <?php endforeach; ?>
+                <?php foreach ($receiptTenders as $tender): ?>
+                    <?php if ($tender['handed'] !== null && abs((float) $tender['handed'] - (float) $tender['applied']) > 0.004): ?>
+                    <span class="tender-note">
+                        <?php echo e($tender['label']); ?>: handed <?php echo e($receiptMoney($tender['handed'])); ?>,
+                        applied <?php echo e($receiptMoney($tender['applied'])); ?>
+                        <?php if ((float) $tender['change'] > 0): ?>, returned <?php echo e($receiptMoney($tender['change'])); ?><?php endif; ?>
+                    </span>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="row"><span>Amount paid</span><span><?php echo e($receiptMoney($receiptSummary['paid'])); ?></span></div>
+            <?php endif; ?>
+            <?php if ((float) $receipt['change'] > 0): ?>
+            <div class="row change-due"><span>Change due</span><span><?php echo e($receiptMoney($receipt['change'])); ?></span></div>
+            <?php endif; ?>
+            <?php if ((float) $receiptSummary['balance'] > 0): ?>
+            <div class="row balance-due"><span>Balance due</span><span><?php echo e($receiptMoney($receiptSummary['balance'])); ?></span></div>
+            <?php endif; ?>
+        </div>
+
+        <?php if ($receiptStatusLabel !== ''): ?>
+        <div class="receipt-status <?php echo $receiptStatus === 'cancelled' ? 'cancelled' : ''; ?>">
+            <?php echo e($receiptStatusLabel); ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if ((string) $receipt['notes'] !== ''): ?>
+        <p class="receipt-footnote"><?php echo nl2br(e($receipt['notes'])); ?></p>
+        <?php endif; ?>
+
+        <p class="receipt-thanks">Thank you for your purchase!</p>
+        <?php if ($receiptFooter !== ''): ?>
+        <p class="receipt-footnote"><?php echo nl2br(e($receiptFooter)); ?></p>
+        <?php endif; ?>
+        <p class="receipt-trace">
+            <?php echo e($receiptNumber); ?> | <?php echo $receiptWidth; ?> mm
+            <?php if ($receiptIsReprint): ?>
+            | reprinted<?php echo $receipt['printed_by'] !== '' ? ' by ' . e($receipt['printed_by']) : ''; ?>
+            <?php endif; ?>
+        </p>
+    </main>
+
+    <script>
+        (function () {
+            'use strict';
+            if (document.body.dataset.autoprint === '1') {
+                window.addEventListener('load', function () {
+                    window.setTimeout(function () { window.print(); }, 200);
+                });
+            }
+        })();
+    </script>
+</body>
+</html>
