@@ -29,9 +29,9 @@ if ($editing && $oldPoint !== [] && (int) ($oldPoint['qr_point_id'] ?? 0) === (i
     $editingPoint = array_merge($editingPoint, $oldPoint);
 }
 $newPoint = ($oldPoint !== [] && (int) ($oldPoint['qr_point_id'] ?? 0) === 0) ? $oldPoint : [];
-$renderAmount = static function (array $point): string {
+$renderAmount = static function (array $point) use ($companyCurrency): string {
     if ((string) ($point['amount_type'] ?? 'open') === 'fixed' && (float) ($point['amount'] ?? 0) > 0) {
-        return formatPrice((float) $point['amount']);
+        return formatPrice((float) $point['amount'], null, $companyCurrency);
     }
     return 'Open amount';
 };
@@ -133,8 +133,8 @@ $renderFields = static function (string $prefix, array $point) use ($branches, $
         <div class="col-12 col-md-3">
             <label class="form-label" for="<?php echo e($prefix); ?>_amount">Fixed amount</label>
             <input type="number" class="form-control" id="<?php echo e($prefix); ?>_amount" name="amount"
-                   value="<?php echo $amountType === 'fixed' && (float) ($point['amount'] ?? 0) > 0 ? e(number_format((float) $point['amount'], 2, '.', '')) : ''; ?>"
-                   min="0.01" step="0.01" data-qr-amount
+                   value="<?php echo $amountType === 'fixed' && (float) ($point['amount'] ?? 0) > 0 ? e(number_format((float) $point['amount'], 0, '.', '')) : ''; ?>"
+                   min="1" step="1" data-qr-amount
                    <?php echo $amountType === 'fixed' ? '' : 'disabled'; ?>>
             <div class="form-text">Only used by a fixed-amount code.</div>
         </div>

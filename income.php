@@ -111,9 +111,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('/income?action=transactions');
         }
 
-        $gross = (float) ($_POST['gross_amount'] ?? 0);
-        $discount = (float) ($_POST['discount_amount'] ?? 0);
-        $tax = (float) ($_POST['tax_amount'] ?? 0);
+        $gross = moneyInput($_POST['gross_amount'] ?? 0);
+        $discount = moneyInput($_POST['discount_amount'] ?? 0);
+        $tax = moneyInput($_POST['tax_amount'] ?? 0);
         $net = $gross - $discount;
         $total = $net + $tax;
 
@@ -255,5 +255,7 @@ $totalReceived = array_sum(array_map(
 ));
 
 $pageTitle = $action === 'transactions' ? 'Income Transactions' : 'Income Sources';
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/income.html';

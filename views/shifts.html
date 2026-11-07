@@ -27,7 +27,13 @@ require APP_ROOT . '/views/layout/header.php';
             <!-- ================= My register ================= -->
             <div class="card border-0 shadow-sm mt-3">
                 <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-cash-stack me-1"></i>My register</span>
+                    <span class="d-inline-flex align-items-center gap-2">
+                        <span class="d-inline-flex align-items-center justify-content-center bg-light text-secondary rounded-3 flex-shrink-0"
+                              style="width: 42px; height: 36px;" role="img" aria-label="Cash drawer placeholder">
+                            <i class="bi bi-cash-stack" aria-hidden="true"></i>
+                        </span>
+                        <span>My register</span>
+                    </span>
                     <?php if ($myOpenShift): ?>
                     <span class="badge bg-success">Open since <?php echo e(date('D d M, H:i', strtotime((string) $myOpenShift['opened_at']))); ?></span>
                     <?php else: ?>
@@ -40,11 +46,11 @@ require APP_ROOT . '/views/layout/header.php';
                     <div class="row g-3">
                         <div class="col-6 col-lg-3">
                             <div class="text-muted small">Float in drawer</div>
-                            <div class="fs-5 fw-semibold"><?php echo e(formatPrice($myTotals['float'])); ?></div>
+                            <div class="fs-5 fw-semibold"><?php echo e(formatPrice($myTotals['float'], null, $companyCurrency)); ?></div>
                         </div>
                         <div class="col-6 col-lg-3">
                             <div class="text-muted small">Cash receipts</div>
-                            <div class="fs-5 fw-semibold"><?php echo e(formatPrice($myTotals['cash_receipts'])); ?></div>
+                            <div class="fs-5 fw-semibold"><?php echo e(formatPrice($myTotals['cash_receipts'], null, $companyCurrency)); ?></div>
                         </div>
                         <div class="col-6 col-lg-3">
                             <div class="text-muted small">Sales on shift</div>
@@ -52,7 +58,7 @@ require APP_ROOT . '/views/layout/header.php';
                         </div>
                         <div class="col-6 col-lg-3">
                             <div class="text-muted small">Expected cash</div>
-                            <div class="fs-5 fw-semibold"><?php echo e(formatPrice($myTotals['expected_cash'])); ?></div>
+                            <div class="fs-5 fw-semibold"><?php echo e(formatPrice($myTotals['expected_cash'], null, $companyCurrency)); ?></div>
                         </div>
                     </div>
                     <div class="d-flex flex-wrap gap-2 mt-3">
@@ -83,8 +89,8 @@ require APP_ROOT . '/views/layout/header.php';
                         </div>
                         <div class="col-6 col-md-3">
                             <label class="form-label" for="opening_float">Opening float</label>
-                            <input class="form-control" type="number" step="0.01" min="0" name="opening_float"
-                                   id="opening_float" value="0.00" required>
+                            <input class="form-control" type="number" step="1" min="0" name="opening_float"
+                                   id="opening_float" value="0" required>
                         </div>
                         <div class="col-12 col-md-3">
                             <label class="form-label" for="opening_note">Note</label>
@@ -101,11 +107,23 @@ require APP_ROOT . '/views/layout/header.php';
             <!-- ================= Shift detail ================= -->
             <?php if ($shift): ?>
             <?php $canMove = $shift['status'] === 'open' && can('shifts', 'update'); ?>
+            <?php
+            $shiftCashierName = trim((string) ($shift['cashier_name'] ?? ''));
+            if ($shiftCashierName === '') {
+                $shiftCashierName = trim((string) ($shift['cashier_username'] ?? ''));
+            }
+            ?>
             <div class="card border-0 shadow-sm mt-4">
                 <div class="card-header fw-semibold d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <span>
-                        Shift #<?php echo (int) $shift['shift_id']; ?> — <?php echo e($shift['cashier_name'] ?? $shift['cashier_username'] ?? ''); ?>
+                    <span class="d-inline-flex align-items-center gap-2">
+                        <span class="d-inline-flex align-items-center justify-content-center bg-light text-secondary rounded-circle flex-shrink-0"
+                              style="width: 38px; height: 38px;" role="img" aria-label="Cashier photo placeholder">
+                            <i class="bi bi-person-fill fs-5" aria-hidden="true"></i>
+                        </span>
+                        <span>
+                        Shift #<?php echo (int) $shift['shift_id']; ?> — <?php echo e($shiftCashierName !== '' ? $shiftCashierName : 'Cashier'); ?>
                         <span class="text-muted">at <?php echo e($shift['branch_name'] ?? 'no branch'); ?></span>
+                        </span>
                     </span>
                     <span class="d-flex gap-2 align-items-center">
                         <span class="badge bg-<?php echo $shift['status'] === 'open' ? 'success' : ($shift['force_closed'] ? 'warning text-dark' : 'secondary'); ?>">
@@ -123,18 +141,18 @@ require APP_ROOT . '/views/layout/header.php';
                             <h6 class="text-muted">Reconciliation</h6>
                             <table class="table table-sm mb-0">
                                 <tbody>
-                                    <tr><th>Opening float</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['opening_float'])); ?></td></tr>
+                                    <tr><th>Opening float</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['opening_float'], null, $companyCurrency)); ?></td></tr>
                                     <?php if (abs($shiftTotals['float_adjustments']) > 0.0001): ?>
-                                    <tr><th>Float adjustments</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['float_adjustments'])); ?></td></tr>
+                                    <tr><th>Float adjustments</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['float_adjustments'], null, $companyCurrency)); ?></td></tr>
                                     <?php endif; ?>
-                                    <tr><th>+ Cash receipts</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['cash_receipts'])); ?></td></tr>
-                                    <tr><th>+ Paid in</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['paid_in'])); ?></td></tr>
-                                    <tr><th>− Cash refunds</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['cash_refunds'])); ?></td></tr>
-                                    <tr><th>− Paid out</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['paid_out'])); ?></td></tr>
-                                    <tr class="table-light"><th>Expected cash in drawer</th><td class="text-end fw-semibold"><?php echo e(formatPrice($shiftTotals['expected_cash'])); ?></td></tr>
+                                    <tr><th>+ Cash receipts</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['cash_receipts'], null, $companyCurrency)); ?></td></tr>
+                                    <tr><th>+ Paid in</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['paid_in'], null, $companyCurrency)); ?></td></tr>
+                                    <tr><th>− Cash refunds</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['cash_refunds'], null, $companyCurrency)); ?></td></tr>
+                                    <tr><th>− Paid out</th><td class="text-end"><?php echo e(formatPrice($shiftTotals['paid_out'], null, $companyCurrency)); ?></td></tr>
+                                    <tr class="table-light"><th>Expected cash in drawer</th><td class="text-end fw-semibold"><?php echo e(formatPrice($shiftTotals['expected_cash'], null, $companyCurrency)); ?></td></tr>
                                     <tr>
                                         <th>Counted at close</th>
-                                        <td class="text-end"><?php echo $shiftTotals['closing_count'] === null ? '<span class="text-muted">not counted</span>' : e(formatPrice((float) $shiftTotals['closing_count'])); ?></td>
+                                        <td class="text-end"><?php echo $shiftTotals['closing_count'] === null ? '<span class="text-muted">not counted</span>' : e(formatPrice((float) $shiftTotals['closing_count'], null, $companyCurrency)); ?></td>
                                     </tr>
                                     <tr>
                                         <th>Variance</th>
@@ -143,7 +161,7 @@ require APP_ROOT . '/views/layout/header.php';
                                             <span class="text-muted">—</span>
                                             <?php else: ?>
                                             <span class="badge bg-<?php echo abs((float) $shiftTotals['variance']) < 0.01 ? 'success' : 'danger'; ?>">
-                                                <?php echo e(formatPrice((float) $shiftTotals['variance'])); ?>
+                                                <?php echo e(formatPrice((float) $shiftTotals['variance'], null, $companyCurrency)); ?>
                                             </span>
                                             <?php endif; ?>
                                         </td>
@@ -151,8 +169,8 @@ require APP_ROOT . '/views/layout/header.php';
                                 </tbody>
                             </table>
                             <p class="small text-muted mb-0 mt-2">
-                                Total receipts <?php echo e(formatPrice($shiftTotals['total_receipts'])); ?>, of which
-                                non-cash <?php echo e(formatPrice($shiftTotals['non_cash_receipts'])); ?>.
+                                Total receipts <?php echo e(formatPrice($shiftTotals['total_receipts'], null, $companyCurrency)); ?>, of which
+                                non-cash <?php echo e(formatPrice($shiftTotals['non_cash_receipts'], null, $companyCurrency)); ?>.
                                 Change returned to customers is not a drawer movement: receipts are booked at the amount applied to the sale.
                             </p>
                         </div>
@@ -170,7 +188,7 @@ require APP_ROOT . '/views/layout/header.php';
                                             <span class="badge bg-info text-dark ms-1">cash</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="text-end"><?php echo e(formatPrice((float) $row['total'])); ?></td>
+                                        <td class="text-end"><?php echo e(formatPrice((float) $row['total'], null, $companyCurrency)); ?></td>
                                         <td class="text-end"><?php echo (int) $row['entries']; ?></td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -199,7 +217,7 @@ require APP_ROOT . '/views/layout/header.php';
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <label class="form-label" for="amount">Amount</label>
-                                    <input class="form-control form-control-sm" type="number" step="0.01" name="amount" id="amount" required>
+                                    <input class="form-control form-control-sm" type="number" step="1" name="amount" id="amount" required>
                                 </div>
                                 <div class="col-6 col-md-4">
                                     <label class="form-label" for="reason">Reason</label>
@@ -213,7 +231,13 @@ require APP_ROOT . '/views/layout/header.php';
                         </div>
                     </div>
 
-                    <h6 class="text-muted mt-4">Drawer movements</h6>
+                    <h6 class="text-muted mt-4 d-flex align-items-center gap-2">
+                        <span class="d-inline-flex align-items-center justify-content-center bg-light text-secondary rounded-3 flex-shrink-0"
+                              style="width: 34px; height: 30px;" role="img" aria-label="Cash drawer placeholder">
+                            <i class="bi bi-cash-stack" aria-hidden="true"></i>
+                        </span>
+                        Drawer movements
+                    </h6>
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead><tr><th>When</th><th>Type</th><th class="text-end">Amount</th><th>Reason</th><th>By</th></tr></thead>
@@ -222,7 +246,7 @@ require APP_ROOT . '/views/layout/header.php';
                                 <tr>
                                     <td class="small"><?php echo e(date('d M H:i', strtotime((string) $movement['created_at']))); ?></td>
                                     <td><?php echo e($movementLabels[$movement['movement_type']] ?? $movement['movement_type']); ?></td>
-                                    <td class="text-end"><?php echo e(formatPrice((float) $movement['amount'])); ?></td>
+                                    <td class="text-end"><?php echo e(formatPrice((float) $movement['amount'], null, $companyCurrency)); ?></td>
                                     <td class="small">
                                         <?php echo e($movement['reason'] ?? ''); ?>
                                         <?php if (!empty($movement['reference_invoice_id'])): ?>
@@ -250,9 +274,9 @@ require APP_ROOT . '/views/layout/header.php';
                                         <a href="<?php echo e(url('/sales?action=sales&sale_id=' . (int) $sale['invoice_id'])); ?>"><?php echo e($sale['invoice_number']); ?></a>
                                     </td>
                                     <td class="small"><?php echo e($sale['issue_date']); ?></td>
-                                    <td class="text-end"><?php echo e(formatPrice((float) $sale['total_amount'])); ?></td>
-                                    <td class="text-end"><?php echo e(formatPrice((float) $sale['amount_paid'])); ?></td>
-                                    <td class="text-end"><?php echo e(formatPrice((float) $sale['amount_owed'])); ?></td>
+                                    <td class="text-end"><?php echo e(formatPrice((float) $sale['total_amount'], null, $companyCurrency)); ?></td>
+                                    <td class="text-end"><?php echo e(formatPrice((float) $sale['amount_paid'], null, $companyCurrency)); ?></td>
+                                    <td class="text-end"><?php echo e(formatPrice((float) $sale['amount_owed'], null, $companyCurrency)); ?></td>
                                     <td class="small"><?php echo e($paymentMethods[$sale['payment_method']] ?? (string) $sale['payment_method']); ?></td>
                                     <td><span class="badge bg-secondary"><?php echo e($sale['status']); ?></span></td>
                                 </tr>
@@ -274,8 +298,8 @@ require APP_ROOT . '/views/layout/header.php';
                                 <input type="hidden" name="shift_id" value="<?php echo (int) $shift['shift_id']; ?>">
                                 <div class="col-12 col-md-4">
                                     <label class="form-label" for="closing_count">Cash counted in the drawer</label>
-                                    <input class="form-control" type="number" step="0.01" min="0" name="closing_count"
-                                           id="closing_count" placeholder="Expected <?php echo e(number_format((float) $shiftTotals['expected_cash'], 2)); ?>" required>
+                                    <input class="form-control" type="number" step="1" min="0" name="closing_count"
+                                           id="closing_count" placeholder="Expected <?php echo e(number_format((float) $shiftTotals['expected_cash'], 0)); ?>" required>
                                 </div>
                                 <div class="col-12 col-md-6">
                                     <label class="form-label" for="closing_note">Closing note</label>
@@ -286,7 +310,7 @@ require APP_ROOT . '/views/layout/header.php';
                                 </div>
                             </form>
                             <p class="small text-muted mb-0 mt-2">
-                                Expected cash is <?php echo e(formatPrice($shiftTotals['expected_cash'])); ?>. Leaving the count empty would
+                                Expected cash is <?php echo e(formatPrice($shiftTotals['expected_cash'], null, $companyCurrency)); ?>. Leaving the count empty would
                                 require a manager force-close.
                             </p>
                         </div>
@@ -384,19 +408,28 @@ require APP_ROOT . '/views/layout/header.php';
                                 <?php $t = $row['totals']; ?>
                                 <tr>
                                     <td><a href="<?php echo e(url('/shifts?action=detail&shift_id=' . (int) $row['shift_id'])); ?>">#<?php echo (int) $row['shift_id']; ?></a></td>
-                                    <td><?php echo e($row['cashier_name'] ?: ($row['cashier_username'] ?? '')); ?></td>
+                                    <td>
+                                        <span class="d-inline-flex align-items-center justify-content-center bg-light text-secondary rounded-circle flex-shrink-0 me-2"
+                                              style="width: 30px; height: 30px;" role="img" aria-label="Cashier photo placeholder">
+                                            <i class="bi bi-person-fill" aria-hidden="true"></i>
+                                        </span>
+                                        <?php
+                                        $cashierName = trim((string) ($row['cashier_name'] ?: ($row['cashier_username'] ?? '')));
+                                        echo e($cashierName !== '' ? $cashierName : 'Cashier');
+                                        ?>
+                                    </td>
                                     <td class="small"><?php echo e($row['branch_name'] ?? ''); ?></td>
                                     <td class="small"><?php echo e(date('d M H:i', strtotime((string) $row['opened_at']))); ?></td>
                                     <td class="small"><?php echo $row['closed_at'] ? e(date('d M H:i', strtotime((string) $row['closed_at']))) : '—'; ?></td>
                                     <td class="text-end"><?php echo (int) $t['sales_count']; ?></td>
-                                    <td class="text-end"><?php echo e(formatPrice($t['cash_receipts'])); ?></td>
-                                    <td class="text-end"><?php echo e(formatPrice($t['expected_cash'])); ?></td>
-                                    <td class="text-end"><?php echo $t['closing_count'] === null ? '—' : e(formatPrice((float) $t['closing_count'])); ?></td>
+                                    <td class="text-end"><?php echo e(formatPrice($t['cash_receipts'], null, $companyCurrency)); ?></td>
+                                    <td class="text-end"><?php echo e(formatPrice($t['expected_cash'], null, $companyCurrency)); ?></td>
+                                    <td class="text-end"><?php echo $t['closing_count'] === null ? '—' : e(formatPrice((float) $t['closing_count'], null, $companyCurrency)); ?></td>
                                     <td class="text-end">
                                         <?php if ($t['variance'] === null): ?>
                                         <span class="text-muted">—</span>
                                         <?php else: ?>
-                                        <span class="text-<?php echo abs((float) $t['variance']) < 0.01 ? 'success' : 'danger'; ?>"><?php echo e(formatPrice((float) $t['variance'])); ?></span>
+                                        <span class="text-<?php echo abs((float) $t['variance']) < 0.01 ? 'success' : 'danger'; ?>"><?php echo e(formatPrice((float) $t['variance'], null, $companyCurrency)); ?></span>
                                         <?php endif; ?>
                                     </td>
                                     <td>

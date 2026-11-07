@@ -10,6 +10,7 @@ if (!defined('APP_ROOT')) {
     define('APP_ROOT', dirname(__DIR__));
 }
 require_once APP_ROOT . '/config/database.php';
+require_once APP_ROOT . '/includes/helpers.php';
 
 /**
  * List payments received with customer and invoice context.
@@ -18,7 +19,7 @@ function getPaymentsReceivedByCompany(PDO $pdo, int $companyId = 1): array
 {
     $stmt = $pdo->prepare(
         "SELECT cp.*, c.name AS customer_name,
-                si.invoice_number, si.total_amount AS invoice_total
+                si.invoice_number, si.total_amount AS invoice_total, si.currency AS invoice_currency
          FROM customer_payments cp
          LEFT JOIN customers c ON cp.customer_id = c.customer_id
          LEFT JOIN sales_invoices si ON cp.invoice_id = si.invoice_id
@@ -55,7 +56,8 @@ function recordPaymentReceived(PDO $pdo, array $paymentData): int
     }
 
     $check = $pdo->prepare(
-        'SELECT customer_id, company_id, status FROM sales_invoices WHERE invoice_id = ?'
+        'SELECT customer_id, company_id, status, currency, exchange_rate
+         FROM sales_invoices WHERE invoice_id = ?'
     );
     $check->execute([$invoiceId]);
     $invoice = $check->fetch(PDO::FETCH_ASSOC);
@@ -70,14 +72,18 @@ function recordPaymentReceived(PDO $pdo, array $paymentData): int
     try {
         $stmt = $pdo->prepare(
             'INSERT INTO customer_payments
-                (company_id, customer_id, invoice_id, amount, payment_date, payment_method, reference_number, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                (company_id, customer_id, invoice_id, amount, currency, exchange_rate, base_amount,
+                 payment_date, payment_method, reference_number, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $companyId,
             $customerId,
             $invoiceId,
             $amount,
+            (string) ($invoice['currency'] ?? 'NGN'),
+            (float) ($invoice['exchange_rate'] ?? 1),
+            toBaseAmount($amount, (float) ($invoice['exchange_rate'] ?? 1)),
             $paymentData['payment_date'] ?? date('Y-m-d'),
             $paymentData['payment_method'] ?? 'bank_transfer',
             $paymentData['reference_number'] ?? '',
@@ -101,8 +107,9 @@ function recordPaymentReceived(PDO $pdo, array $paymentData): int
 function refreshInvoicePaymentStatus(PDO $pdo, int $invoiceId): void
 {
     $stmt = $pdo->prepare(
-        'SELECT si.total_amount,
-                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.invoice_id = si.invoice_id), 0) AS paid
+        'SELECT si.total_amount, si.base_total_amount,
+                COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.invoice_id = si.invoice_id), 0) AS paid,
+                COALESCE((SELECT SUM(cp.base_amount) FROM customer_payments cp WHERE cp.invoice_id = si.invoice_id), 0) AS base_paid
          FROM sales_invoices si
          WHERE si.invoice_id = ?'
     );
@@ -115,6 +122,9 @@ function refreshInvoicePaymentStatus(PDO $pdo, int $invoiceId): void
     $total = (float) $row['total_amount'];
     $paid = (float) $row['paid'];
     $balance = max($total - $paid, 0);
+    $baseTotal = (float) $row['base_total_amount'];
+    $basePaid = (float) $row['base_paid'];
+    $baseBalance = max($baseTotal - $basePaid, 0);
 
     $status = 'pending';
     if ($total > 0 && $paid + 0.0001 >= $total) {
@@ -126,12 +136,15 @@ function refreshInvoicePaymentStatus(PDO $pdo, int $invoiceId): void
     $pdo->prepare(
         'UPDATE sales_invoices
          SET status = ?, amount_paid = ?, amount_owed = ?, paid_date = ?
+             , base_amount_paid = ?, base_amount_owed = ?
          WHERE invoice_id = ?'
     )->execute([
         $status,
         $paid,
         $balance,
         $status === 'paid' ? date('Y-m-d') : null,
+        $basePaid,
+        $baseBalance,
         $invoiceId,
     ]);
 }
@@ -143,21 +156,15 @@ function getOutstandingReceivables(PDO $pdo, int $companyId = 1): array
 {
     $stmt = $pdo->prepare(
         "SELECT c.customer_id, c.name AS customer_name,
-                SUM(GREATEST(si.total_amount - COALESCE(pay.paid, 0), 0)) AS outstanding_amount
+                SUM(si.base_amount_owed) AS outstanding_amount
          FROM sales_invoices si
          INNER JOIN customers c ON c.customer_id = si.customer_id
-         LEFT JOIN (
-             SELECT invoice_id, SUM(amount) AS paid
-             FROM customer_payments
-             WHERE company_id = ?
-             GROUP BY invoice_id
-         ) pay ON pay.invoice_id = si.invoice_id
          WHERE si.company_id = ? AND si.status IN ('pending', 'partial')
          GROUP BY c.customer_id, c.name
          HAVING outstanding_amount > 0
          ORDER BY outstanding_amount DESC"
     );
-    $stmt->execute([$companyId, $companyId]);
+    $stmt->execute([$companyId]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -167,7 +174,7 @@ function getOutstandingReceivables(PDO $pdo, int $companyId = 1): array
 function getPaymentSummaryByMethod(PDO $pdo, int $companyId = 1): array
 {
     $stmt = $pdo->prepare(
-        'SELECT payment_method, COUNT(*) AS transaction_count, SUM(amount) AS total_amount
+        'SELECT payment_method, COUNT(*) AS transaction_count, SUM(base_amount) AS total_amount
          FROM customer_payments
          WHERE company_id = ?
          GROUP BY payment_method'

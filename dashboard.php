@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/bootstrap.php';
 require_once APP_ROOT . '/includes/dashboard_functions.php';
+require_once APP_ROOT . '/includes/company_functions.php';
 
 auth_require();
 require_permission('dashboard', 'view');
@@ -36,5 +37,7 @@ $lowStock = getLowStockProducts($pdo, $companyId, 5);
 $monthlyTrend = getDashboardMonthlyTrend($pdo, $companyId, 6);
 $invoiceStatus = getDashboardInvoiceStatusBreakdown($pdo, $companyId);
 $pageTitle = 'Dashboard';
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/dashboard.html';

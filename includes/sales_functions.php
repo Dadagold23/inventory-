@@ -14,6 +14,7 @@ defined('SALES_MODULE') || define('SALES_MODULE', 'sales');
 // Require foundation
 defined('APP_ROOT') || define('APP_ROOT', dirname(__DIR__));
 require_once APP_ROOT . '/config/database.php';
+require_once APP_ROOT . '/includes/helpers.php';
 require_once APP_ROOT . '/includes/payment_methods_functions.php';
 require_once APP_ROOT . '/includes/inventory_functions.php';
 
@@ -136,9 +137,9 @@ if (!function_exists('salesPaymentMethodOptions')) {
 function getCustomersByCompany(PDO $pdo, int $companyId = 1): array {
     $stmt = $pdo->prepare("
         SELECT c.*,
-               (SELECT COALESCE(SUM(cp.amount), 0)
+               (SELECT COALESCE(SUM(cp.base_amount), 0)
                   FROM customer_payments cp WHERE cp.customer_id = c.customer_id) AS total_paid,
-               (SELECT COALESCE(SUM(si.total_amount - si.amount_paid), 0)
+               (SELECT COALESCE(SUM(si.base_amount_owed), 0)
                   FROM sales_invoices si
                  WHERE si.customer_id = c.customer_id
                    AND si.status IN ('pending','partial')) AS outstanding
@@ -163,11 +164,17 @@ function getCustomerById(PDO $pdo, int $customerId): ?array {
  * Create a customer.
  */
 function createCustomer(PDO $pdo, array $customerData): int {
+    // Derive currency: explicit > country rule (blank/Nigeria = NGN, other = USD).
+    $currency = strtoupper(trim((string) ($customerData['currency'] ?? '')));
+    if ($currency === '') {
+        $currency = customerCurrencyCode(['country' => $customerData['country'] ?? '']);
+    }
+
     $stmt = $pdo->prepare("
         INSERT INTO customers (company_id, name, email, phone, tax_id, address,
-               city, state, postal_code, country, credit_limit, credit_used,
+               city, state, postal_code, country, currency, credit_limit, credit_used,
                payment_terms, is_active, is_tax_exempt, notes, payment_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $stmt->execute([
@@ -181,6 +188,7 @@ function createCustomer(PDO $pdo, array $customerData): int {
         $customerData['state'] ?? '',
         $customerData['postal_code'] ?? '',
         $customerData['country'] ?? '',
+        $currency,
         (float) ($customerData['credit_limit'] ?? 0),
         (float) ($customerData['credit_used'] ?? 0),
         $customerData['payment_terms'] ?? 'Net 30',
@@ -202,9 +210,30 @@ function updateCustomer(PDO $pdo, int $customerId, array $customerData): bool {
         return false;
     }
 
+    // Derive currency: explicit from form > country rule > keep existing.
+    $newCurrency = strtoupper(trim((string) ($customerData['currency'] ?? '')));
+    if ($newCurrency === '') {
+        $hasCurrencyInput = array_key_exists('currency', $customerData);
+        $hasCountryInput = array_key_exists('country', $customerData);
+
+        if ($hasCurrencyInput || $hasCountryInput) {
+            $newCurrency = customerCurrencyCode([
+                'country' => $customerData['country'] ?? $current['country'] ?? '',
+            ]);
+        } else {
+            // Partial update (e.g. deactivation): preserve the stored override.
+            $newCurrency = strtoupper(trim((string) ($current['currency'] ?? '')));
+            if ($newCurrency === '') {
+                $newCurrency = customerCurrencyCode($current);
+            }
+        }
+    }
+    $newCurrency = $newCurrency !== '' ? $newCurrency : null;
+
     $stmt = $pdo->prepare("
         UPDATE customers SET name = ?, email = ?, phone = ?, tax_id = ?,
             address = ?, city = ?, state = ?, postal_code = ?, country = ?,
+            currency = ?,
             credit_limit = ?, credit_used = ?, payment_terms = ?, is_active = ?,
             is_tax_exempt = ?, notes = ?, updated_at = NOW()
         WHERE customer_id = ? AND company_id = ?
@@ -220,6 +249,7 @@ function updateCustomer(PDO $pdo, int $customerId, array $customerData): bool {
         $customerData['state'] ?? $current['state'],
         $customerData['postal_code'] ?? $current['postal_code'],
         $customerData['country'] ?? $current['country'],
+        $newCurrency,
         $customerData['credit_limit'] ?? $current['credit_limit'],
         $customerData['credit_used'] ?? $current['credit_used'],
         $customerData['payment_terms'] ?? $current['payment_terms'],
@@ -236,9 +266,9 @@ function updateCustomer(PDO $pdo, int $customerId, array $customerData): bool {
  */
 function salesRecalcCustomerCredit(PDO $pdo, int $customerId): void {
     $stmt = $pdo->prepare(
-        "SELECT COALESCE(SUM(total_amount - amount_paid), 0) AS outstanding,
+        "SELECT COALESCE(SUM(base_amount_owed), 0) AS outstanding,
                 COALESCE(SUM(CASE WHEN due_date IS NOT NULL AND due_date < CURDATE()
-                                  THEN total_amount - amount_paid ELSE 0 END), 0) AS overdue
+                                  THEN base_amount_owed ELSE 0 END), 0) AS overdue
          FROM sales_invoices
          WHERE customer_id = ? AND status IN ('pending','partial')"
     );
@@ -263,13 +293,13 @@ function salesRecalcCustomerCredit(PDO $pdo, int $customerId): void {
 function getCustomerBalance(PDO $pdo, int $customerId): array {
     $stmt = $pdo->prepare("
         SELECT
-            (SELECT COALESCE(SUM(total_amount), 0) FROM quotes
+            (SELECT COALESCE(SUM(total_amount * COALESCE(NULLIF(exchange_rate, 0), 1)), 0) FROM quotes
               WHERE customer_id = ? AND status IN ('sent','accepted')) AS quote_total,
-            (SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices
+            (SELECT COALESCE(SUM(base_total_amount), 0) FROM sales_invoices
               WHERE customer_id = ? AND status IN ('pending','partial')) AS sale_total,
-            (SELECT COALESCE(SUM(amount), 0) FROM customer_payments
+            (SELECT COALESCE(SUM(base_amount), 0) FROM customer_payments
               WHERE customer_id = ?) AS payments_received,
-            (SELECT COALESCE(SUM(total_amount - amount_paid), 0) FROM sales_invoices
+            (SELECT COALESCE(SUM(base_amount_owed), 0) FROM sales_invoices
               WHERE customer_id = ? AND status IN ('pending','partial')) AS amount_owed
     ");
     $stmt->execute([$customerId, $customerId, $customerId, $customerId]);
@@ -291,6 +321,7 @@ function getQuotesByCompany(PDO $pdo, int $companyId = 1, ?string $status = null
 
     $stmt = $pdo->prepare("
         SELECT q.*, c.name AS customer_name, c.email AS customer_email,
+               c.currency AS customer_currency, c.country AS customer_country,
                b.name AS branch_name, u.full_name AS created_by_name
         FROM quotes q
         LEFT JOIN customers c ON q.customer_id = c.customer_id
@@ -309,6 +340,7 @@ function getQuotesByCompany(PDO $pdo, int $companyId = 1, ?string $status = null
 function getQuoteById(PDO $pdo, int $quoteId): ?array {
     $stmt = $pdo->prepare("
         SELECT q.*, c.name AS customer_name, c.email AS customer_email,
+               c.currency AS customer_currency, c.country AS customer_country,
                b.name AS branch_name
         FROM quotes q
         LEFT JOIN customers c ON q.customer_id = c.customer_id
@@ -337,8 +369,9 @@ function getQuoteLines(PDO $pdo, int $quoteId): array {
 /**
  * Normalise posted line arrays into usable line data.
  */
-function salesNormaliseLines(PDO $pdo, array $lines): array {
+function salesNormaliseLines(PDO $pdo, array $lines, float $exchangeRate = 1.0): array {
     $normalised = [];
+    $exchangeRate = $exchangeRate > 0 ? $exchangeRate : 1.0;
 
     foreach ($lines as $line) {
         $productId = (int) ($line['product_id'] ?? 0);
@@ -349,22 +382,23 @@ function salesNormaliseLines(PDO $pdo, array $lines): array {
 
         $product = $productId > 0 ? getProductRecord($pdo, $productId) : null;
         $unitPrice = array_key_exists('unit_price', $line) && $line['unit_price'] !== ''
-            ? (float) $line['unit_price']
-            : (float) ($product['sales_price'] ?? 0);
+            ? moneyInput($line['unit_price'])
+            : moneyRound((float) ($product['sales_price'] ?? 0) / $exchangeRate);
         $description = trim((string) ($line['description'] ?? ''))
             ?: (string) ($product['name'] ?? 'Item');
         $discountPercent = max(0, min(100, (float) ($line['discount_percent'] ?? 0)));
 
-        $gross = salesRound($quantity * $unitPrice);
-        $discountAmount = salesRound($gross * $discountPercent / 100);
-        $lineTotal = salesRound($gross - $discountAmount);
+        // Money is whole units; quantity keeps its decimals.
+        $gross = moneyRound($quantity * $unitPrice);
+        $discountAmount = moneyRound($gross * $discountPercent / 100);
+        $lineTotal = moneyRound($gross - $discountAmount);
 
         $normalised[] = [
             'product_id' => $productId > 0 ? $productId : null,
             'description' => $description,
             'quantity' => salesRound($quantity),
-            'unit_price' => salesRound($unitPrice),
-            'unit_cost' => salesRound((float) ($product['cost_price'] ?? 0)),
+            'unit_price' => moneyRound($unitPrice),
+            'unit_cost' => moneyRound((float) ($product['cost_price'] ?? 0)),
             'discount_percent' => $discountPercent,
             'discount_amount' => $discountAmount,
             'line_total' => $lineTotal,
@@ -393,47 +427,66 @@ if (!function_exists('getProductRecord')) {
  */
 function createQuote(PDO $pdo, array $quoteData): int {
     $companyId = (int) ($quoteData['company_id'] ?? salesCompanyId());
-    $lines = salesNormaliseLines($pdo, $quoteData['lines'] ?? []);
+    $customerId = (int) ($quoteData['customer_id'] ?? 0);
+    // A quote is priced in its customer's currency, exactly like the invoice
+    // it may become.
+    $companyCurrency = strtoupper(trim(salesSetting($pdo, 'currency_default', 'NGN')));
+    $customerRow = $customerId > 0 ? getCustomerById($pdo, $customerId) : null;
+    $currency = strtoupper(trim((string) ($quoteData['currency'] ?? '')));
+    if ($currency === '') {
+        $currency = customerCurrencyCode($customerRow ?: [], $companyCurrency);
+    }
+    try {
+        $exchangeRate = isset($quoteData['exchange_rate']) && (float) $quoteData['exchange_rate'] > 0
+            ? (float) $quoteData['exchange_rate']
+            : currencyExchangeRate($pdo, $currency, $companyId);
+    } catch (RuntimeException $e) {
+        app_log('warning', 'Quote exchange rate unavailable: ' . $e->getMessage());
+        return 0;
+    }
 
+    $lines = salesNormaliseLines($pdo, $quoteData['lines'] ?? [], $exchangeRate);
     $subtotal = 0.0;
     foreach ($lines as $line) {
         $subtotal += $line['line_total'];
     }
-
+    $subtotal = moneyRound($subtotal);
     $discountPercent = max(0, min(100, (float) ($quoteData['discount_percent'] ?? 0)));
     $discountAmount = $lines !== []
-        ? salesRound($subtotal * $discountPercent / 100)
-        : (float) ($quoteData['discount_amount'] ?? 0);
+        ? moneyRound($subtotal * $discountPercent / 100)
+        : moneyRound((float) ($quoteData['discount_amount'] ?? 0));
     $taxRate = (float) ($quoteData['tax_rate'] ?? 0);
     $taxable = $subtotal - $discountAmount;
     $taxAmount = array_key_exists('tax_amount', $quoteData) && $quoteData['tax_amount'] !== ''
-        ? (float) $quoteData['tax_amount']
-        : salesRound($taxable * $taxRate);
-    $totalAmount = salesRound($taxable + $taxAmount);
+        ? moneyRound((float) $quoteData['tax_amount'])
+        : moneyRound($taxable * $taxRate);
+    $totalAmount = moneyRound($taxable + $taxAmount);
     $quoteNumber = trim((string) ($quoteData['quote_number'] ?? ''))
         ?: salesNextNumber($pdo, 'quotes', 'quote_number', 'QT');
 
     $pdo->beginTransaction();
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO quotes (company_id, customer_id, branch_id, quote_number, status,
+            INSERT INTO quotes (company_id, customer_id, currency, exchange_rate, branch_id, quote_number, status,
                 issue_date, expiry_date, subtotal, discount_percent, discount_amount,
                 tax_rate, tax_amount, total_amount, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $companyId,
-            (int) ($quoteData['customer_id'] ?? 0),
+            $customerId,
+            $currency,
+            $exchangeRate,
             !empty($quoteData['branch_id']) ? (int) $quoteData['branch_id'] : salesDefaultBranchId($pdo, $companyId),
             $quoteNumber,
             $quoteData['status'] ?? 'draft',
             $quoteData['issue_date'] ?? date('Y-m-d'),
             $quoteData['expiry_date'] ?? date('Y-m-d', strtotime('+30 days')),
-            salesRound($subtotal),
+            $subtotal,
             $discountPercent,
-            salesRound($discountAmount),
+            $discountAmount,
             $taxRate,
-            salesRound($taxAmount),
+            $taxAmount,
             $totalAmount,
             $quoteData['notes'] ?? '',
             (int) ($quoteData['created_by'] ?? salesUserId()),
@@ -482,8 +535,29 @@ function updateQuote(PDO $pdo, int $quoteId, array $quoteData): bool {
         return false;
     }
 
+    $customerId = (int) ($quoteData['customer_id'] ?? $quote['customer_id']);
+    $customerChanged = $customerId !== (int) $quote['customer_id'];
+    $currency = strtoupper(trim((string) ($quoteData['currency'] ?? '')));
+    if ($currency === '') {
+        $currency = !$customerChanged ? strtoupper(trim((string) ($quote['currency'] ?? ''))) : '';
+    }
+    if ($currency === '') {
+        $customerRow = $customerId > 0 ? getCustomerById($pdo, $customerId) : null;
+        $currency = customerCurrencyCode($customerRow ?: [], strtoupper(trim(salesSetting($pdo, 'currency_default', 'NGN'))));
+    }
+    try {
+        $exchangeRate = isset($quoteData['exchange_rate']) && (float) $quoteData['exchange_rate'] > 0
+            ? (float) $quoteData['exchange_rate']
+            : (!$customerChanged && (float) ($quote['exchange_rate'] ?? 0) > 0
+                ? (float) $quote['exchange_rate']
+                : currencyExchangeRate($pdo, $currency, (int) $quote['company_id']));
+    } catch (RuntimeException $e) {
+        app_log('warning', 'Quote exchange rate unavailable: ' . $e->getMessage());
+        return false;
+    }
+
     $lines = array_key_exists('lines', $quoteData)
-        ? salesNormaliseLines($pdo, $quoteData['lines'])
+        ? salesNormaliseLines($pdo, $quoteData['lines'], $exchangeRate)
         : null;
 
     $pdo->beginTransaction();
@@ -493,25 +567,26 @@ function updateQuote(PDO $pdo, int $quoteId, array $quoteData): bool {
             foreach ($lines as $line) {
                 $subtotal += $line['line_total'];
             }
+            $subtotal = moneyRound($subtotal);
             $discountPercent = max(0, min(100, (float) ($quoteData['discount_percent'] ?? $quote['discount_percent'])));
-            $discountAmount = salesRound($subtotal * $discountPercent / 100);
+            $discountAmount = moneyRound($subtotal * $discountPercent / 100);
             $taxRate = (float) ($quoteData['tax_rate'] ?? $quote['tax_rate']);
-            $taxAmount = salesRound(($subtotal - $discountAmount) * $taxRate);
-            $totalAmount = salesRound($subtotal - $discountAmount + $taxAmount);
+            $taxAmount = moneyRound(($subtotal - $discountAmount) * $taxRate);
+            $totalAmount = moneyRound($subtotal - $discountAmount + $taxAmount);
 
             $pdo->prepare("DELETE FROM quote_lines WHERE quote_id = ?")->execute([$quoteId]);
             salesInsertQuoteLines($pdo, $quoteId, $lines);
         } else {
-            $subtotal = (float) ($quoteData['subtotal'] ?? $quote['subtotal']);
+            $subtotal = moneyRound((float) ($quoteData['subtotal'] ?? $quote['subtotal']));
             $discountPercent = (float) ($quoteData['discount_percent'] ?? $quote['discount_percent']);
-            $discountAmount = (float) ($quoteData['discount_amount'] ?? $quote['discount_amount']);
+            $discountAmount = moneyRound((float) ($quoteData['discount_amount'] ?? $quote['discount_amount']));
             $taxRate = (float) ($quoteData['tax_rate'] ?? $quote['tax_rate']);
-            $taxAmount = (float) ($quoteData['tax_amount'] ?? $quote['tax_amount']);
-            $totalAmount = (float) ($quoteData['total_amount'] ?? $quote['total_amount']);
+            $taxAmount = moneyRound((float) ($quoteData['tax_amount'] ?? $quote['tax_amount']));
+            $totalAmount = moneyRound((float) ($quoteData['total_amount'] ?? $quote['total_amount']));
         }
 
         $stmt = $pdo->prepare("
-            UPDATE quotes SET customer_id = ?, branch_id = ?, status = ?,
+            UPDATE quotes SET customer_id = ?, currency = ?, exchange_rate = ?, branch_id = ?, status = ?,
                 issue_date = ?, expiry_date = ?, subtotal = ?, discount_percent = ?,
                 discount_amount = ?, tax_rate = ?, tax_amount = ?, total_amount = ?,
                 notes = ?, updated_at = NOW()
@@ -519,16 +594,18 @@ function updateQuote(PDO $pdo, int $quoteId, array $quoteData): bool {
         ");
         $stmt->execute([
             (int) ($quoteData['customer_id'] ?? $quote['customer_id']),
+            $currency,
+            $exchangeRate,
             !empty($quoteData['branch_id']) ? (int) $quoteData['branch_id'] : $quote['branch_id'],
             $quoteData['status'] ?? $quote['status'],
             $quoteData['issue_date'] ?? $quote['issue_date'],
             $quoteData['expiry_date'] ?? $quote['expiry_date'],
-            salesRound($subtotal),
+            $subtotal,
             $discountPercent,
-            salesRound($discountAmount),
+            $discountAmount,
             $taxRate,
-            salesRound($taxAmount),
-            salesRound($totalAmount),
+            $taxAmount,
+            $totalAmount,
             $quoteData['notes'] ?? $quote['notes'],
             $quoteId,
         ]);
@@ -560,6 +637,8 @@ function convertQuoteToSale(PDO $pdo, int $quoteId): bool {
         'company_id' => (int) $quote['company_id'],
         'customer_id' => (int) $quote['customer_id'],
         'branch_id' => (int) ($quote['branch_id'] ?? 0) ?: null,
+        'currency' => (string) ($quote['currency'] ?? ''),
+        'exchange_rate' => (float) ($quote['exchange_rate'] ?? 0),
         'issue_date' => date('Y-m-d'),
         'due_date' => date('Y-m-d', strtotime('+30 days')),
         'tax_rate' => (float) $quote['tax_rate'],
@@ -593,6 +672,7 @@ function getSalesByCompany(PDO $pdo, int $companyId = 1, ?string $status = null)
 
     $stmt = $pdo->prepare("
         SELECT si.*, c.name AS customer_name, c.email AS customer_email,
+               c.currency AS customer_currency, c.country AS customer_country,
                b.name AS branch_name, u.full_name AS created_by_name
         FROM sales_invoices si
         LEFT JOIN customers c ON si.customer_id = c.customer_id
@@ -611,6 +691,7 @@ function getSalesByCompany(PDO $pdo, int $companyId = 1, ?string $status = null)
 function getSaleById(PDO $pdo, int $saleId): ?array {
     $stmt = $pdo->prepare("
         SELECT si.*, c.name AS customer_name, c.email AS customer_email,
+               c.currency AS customer_currency, c.country AS customer_country,
                b.name AS branch_name, u.full_name AS created_by_name
         FROM sales_invoices si
         LEFT JOIN customers c ON si.customer_id = c.customer_id
@@ -651,7 +732,6 @@ function createSalesInvoice(PDO $pdo, array $data): array {
     $companyId = (int) ($data['company_id'] ?? salesCompanyId());
     $customerId = (int) ($data['customer_id'] ?? 0);
     $branchId = (int) ($data['branch_id'] ?? 0) ?: salesDefaultBranchId($pdo, $companyId);
-    $lines = salesNormaliseLines($pdo, $data['lines'] ?? []);
     $shiftId = (int) ($data['shift_id'] ?? 0);
     $idempotencyKey = trim((string) ($data['idempotency_key'] ?? ''));
 
@@ -667,31 +747,50 @@ function createSalesInvoice(PDO $pdo, array $data): array {
     if ($customerId <= 0) {
         return ['success' => false, 'invoice_id' => 0, 'message' => 'A customer is required.', 'total' => 0];
     }
-    if ($lines === []) {
-        return ['success' => false, 'invoice_id' => 0, 'message' => 'At least one line item is required.', 'total' => 0];
+    $customerStmt = $pdo->prepare("SELECT customer_id, currency, country FROM customers WHERE customer_id = ? AND company_id = ?");
+    $customerStmt->execute([$customerId, $companyId]);
+    $customer = $customerStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$customer) {
+        return ['success' => false, 'invoice_id' => 0, 'message' => 'Customer not found.', 'total' => 0];
     }
 
-    $customerStmt = $pdo->prepare("SELECT customer_id FROM customers WHERE customer_id = ? AND company_id = ?");
-    $customerStmt->execute([$customerId, $companyId]);
-    if (!$customerStmt->fetchColumn()) {
-        return ['success' => false, 'invoice_id' => 0, 'message' => 'Customer not found.', 'total' => 0];
+    // Every sale is priced in its customer's currency. A foreign sale keeps
+    // the dollar amount and is translated into the Naira ledger at the
+    // configured rate; a Naira sale uses rate 1 and never moves.
+    $companyCurrency = strtoupper(trim(salesSetting($pdo, 'currency_default', 'NGN')));
+    $currency = strtoupper(trim((string) ($data['currency'] ?? '')));
+    if ($currency === '') {
+        $currency = customerCurrencyCode($customer, $companyCurrency);
+    }
+    try {
+        $exchangeRate = isset($data['exchange_rate']) && (float) $data['exchange_rate'] > 0
+            ? (float) $data['exchange_rate']
+            : currencyExchangeRate($pdo, $currency, $companyId);
+    } catch (RuntimeException $e) {
+        return ['success' => false, 'invoice_id' => 0, 'message' => $e->getMessage(), 'total' => 0];
+    }
+
+    $lines = salesNormaliseLines($pdo, $data['lines'] ?? [], $exchangeRate);
+    if ($lines === []) {
+        return ['success' => false, 'invoice_id' => 0, 'message' => 'At least one line item is required.', 'total' => 0];
     }
 
     $subtotal = 0.0;
     foreach ($lines as $line) {
         $subtotal += $line['line_total'];
     }
+    $subtotal = moneyRound($subtotal);
     $discountPercent = max(0, min(100, (float) ($data['discount_percent'] ?? 0)));
-    $discountAmount = salesRound($subtotal * $discountPercent / 100);
+    $discountAmount = moneyRound($subtotal * $discountPercent / 100);
     $taxRate = array_key_exists('tax_rate', $data) && $data['tax_rate'] !== ''
         ? (float) $data['tax_rate']
         : (float) salesSetting($pdo, 'default_tax_rate', '0');
     $taxable = $subtotal - $discountAmount;
-    $taxAmount = salesRound($taxable * $taxRate);
-    $totalAmount = salesRound($taxable + $taxAmount);
+    $taxAmount = moneyRound($taxable * $taxRate);
+    $totalAmount = moneyRound($taxable + $taxAmount);
 
-    $amountPaid = min(max(0.0, (float) ($data['amount_paid'] ?? 0)), $totalAmount);
-    $amountOwed = salesRound($totalAmount - $amountPaid);
+    $amountPaid = moneyRound(min(max(0.0, (float) ($data['amount_paid'] ?? 0)), $totalAmount));
+    $amountOwed = moneyRound($totalAmount - $amountPaid);
     $status = $data['status'] ?? ($amountOwed <= 0 ? 'paid' : ($amountPaid > 0 ? 'partial' : 'pending'));
     if (!in_array($status, ['draft', 'pending', 'partial', 'paid', 'cancelled'], true)) {
         $status = 'pending';
@@ -708,16 +807,16 @@ function createSalesInvoice(PDO $pdo, array $data): array {
     if ($tenderLines !== []) {
         $applied = 0.0;
         foreach ($tenderLines as &$tender) {
-            $remaining = salesRound($totalAmount - $applied);
-            $tender['applied'] = salesRound(min($tender['amount'], max(0.0, $remaining)));
-            $applied = salesRound($applied + $tender['applied']);
-            $tendered = salesRound($tendered + $tender['amount']);
+            $remaining = moneyRound($totalAmount - $applied);
+            $tender['applied'] = moneyRound(min($tender['amount'], max(0.0, $remaining)));
+            $applied = moneyRound($applied + $tender['applied']);
+            $tendered = moneyRound($tendered + $tender['amount']);
         }
         unset($tender);
 
         $amountPaid = $applied;
-        $amountOwed = salesRound($totalAmount - $amountPaid);
-        $changeGiven = salesRound(max(0, $tendered - $totalAmount));
+        $amountOwed = moneyRound($totalAmount - $amountPaid);
+        $changeGiven = moneyRound(max(0, $tendered - $totalAmount));
         $status = $amountOwed <= 0 ? 'paid' : ($amountPaid > 0 ? 'partial' : 'pending');
     }
 
@@ -762,19 +861,30 @@ function createSalesInvoice(PDO $pdo, array $data): array {
             $avgCost = $onHand > 0
                 ? (float) $location['on_hand_value'] / $onHand
                 : $line['unit_cost'];
-            $lines[$index]['unit_cost'] = salesRound($avgCost);
-            $lines[$index]['total_cost'] = salesRound($avgCost * $line['quantity']);
+            $lines[$index]['unit_cost'] = moneyRound($avgCost);
+            $lines[$index]['total_cost'] = moneyRound($avgCost * $line['quantity']);
         }
 
         $invoiceNumber = trim((string) ($data['invoice_number'] ?? ''))
             ?: salesNextNumber($pdo, 'sales_invoices', 'invoice_number', 'INV');
 
+        // Naira value of the sale at the rate that applied when it was made.
+        $baseSubtotal = toBaseAmount($subtotal, $exchangeRate);
+        $baseDiscount = toBaseAmount($discountAmount, $exchangeRate);
+        $baseTax = toBaseAmount($taxAmount, $exchangeRate);
+        $baseTotal = toBaseAmount($totalAmount, $exchangeRate);
+        $basePaid = toBaseAmount($amountPaid, $exchangeRate);
+        $baseOwed = toBaseAmount($amountOwed, $exchangeRate);
+
         $stmt = $pdo->prepare("
             INSERT INTO sales_invoices (company_id, customer_id, branch_id, shift_id, invoice_number,
-                issue_date, due_date, subtotal, discount_percent, discount_amount,
+                issue_date, due_date, currency, exchange_rate,
+                base_subtotal, base_discount_amount, base_tax_amount, base_total_amount,
+                base_amount_paid, base_amount_owed,
+                subtotal, discount_percent, discount_amount,
                 tax_amount, total_amount, amount_paid, amount_owed, payment_method,
                 status, notes, created_by, idempotency_key, paid_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $companyId,
@@ -784,7 +894,15 @@ function createSalesInvoice(PDO $pdo, array $data): array {
             $invoiceNumber,
             $data['issue_date'] ?? date('Y-m-d'),
             $data['due_date'] ?? date('Y-m-d', strtotime('+30 days')),
-            salesRound($subtotal),
+            $currency,
+            $exchangeRate,
+            $baseSubtotal,
+            $baseDiscount,
+            $baseTax,
+            $baseTotal,
+            $basePaid,
+            $baseOwed,
+            $subtotal,
             $discountPercent,
             $discountAmount,
             $taxAmount,
@@ -861,11 +979,13 @@ function createSalesInvoice(PDO $pdo, array $data): array {
                     continue;
                 }
                 salesInsertPayment($pdo, $companyId, $customerId, $invoiceId, $tender['applied'],
-                    $tender['method'], $tender['reference'], $data['notes'] ?? '', $shiftId, (float) $tender['amount']);
+                    $tender['method'], $tender['reference'], $data['notes'] ?? '', $shiftId,
+                    (float) $tender['amount'], $currency, $exchangeRate);
             }
         } elseif ($amountPaid > 0) {
             salesInsertPayment($pdo, $companyId, $customerId, $invoiceId, $amountPaid,
-                $data['payment_method'] ?? 'cash', $data['reference_number'] ?? '', $data['notes'] ?? '', $shiftId);
+                $data['payment_method'] ?? 'cash', $data['reference_number'] ?? '', $data['notes'] ?? '', $shiftId,
+                null, $currency, $exchangeRate);
         }
 
         $pdo->commit();
@@ -896,6 +1016,10 @@ function createSalesInvoice(PDO $pdo, array $data): array {
         'amount_paid' => $amountPaid,
         'amount_owed' => $amountOwed,
         'status' => $status,
+        'currency' => $currency,
+        'exchange_rate' => $exchangeRate,
+        'base_total' => $baseTotal,
+        'base_amount_owed' => $baseOwed,
         'tendered' => $tendered,
         'change' => $changeGiven,
         'duplicate' => false,
@@ -908,7 +1032,8 @@ if (!function_exists('salesFindByIdempotencyKey')) {
     {
         try {
             $stmt = $pdo->prepare(
-                "SELECT invoice_id, invoice_number, total_amount, amount_paid, amount_owed, status
+                "SELECT invoice_id, invoice_number, total_amount, amount_paid, amount_owed, status,
+                        currency, exchange_rate, base_total_amount, base_amount_owed
                  FROM sales_invoices WHERE company_id = ? AND idempotency_key = ? LIMIT 1"
             );
             $stmt->execute([$companyId, $key]);
@@ -930,6 +1055,10 @@ if (!function_exists('salesFindByIdempotencyKey')) {
             'amount_paid' => (float) $row['amount_paid'],
             'amount_owed' => (float) $row['amount_owed'],
             'status' => (string) $row['status'],
+            'currency' => (string) ($row['currency'] ?? 'NGN'),
+            'exchange_rate' => (float) ($row['exchange_rate'] ?? 1),
+            'base_total' => (float) ($row['base_total_amount'] ?? $row['total_amount']),
+            'base_amount_owed' => (float) ($row['base_amount_owed'] ?? $row['amount_owed']),
             'tendered' => (float) $row['amount_paid'],
             'change' => 0.0,
             'duplicate' => true,
@@ -954,7 +1083,7 @@ if (!function_exists('salesNormaliseTenders')) {
                 continue;
             }
             $method = trim((string) ($payment['method'] ?? $payment['payment_method'] ?? ''));
-            $amount = salesRound((float) ($payment['amount'] ?? 0));
+            $amount = moneyRound((float) ($payment['amount'] ?? 0));
             if ($method === '' || $amount <= 0) {
                 continue;
             }
@@ -992,7 +1121,7 @@ function createSale(PDO $pdo, array $data): int {
 if (!function_exists('salesInsertPayment')) {
     function salesInsertPayment(PDO $pdo, int $companyId, int $customerId, int $invoiceId,
         float $amount, string $method, string $reference = '', string $notes = '', int $shiftId = 0,
-        ?float $tendered = null): void {
+        ?float $tendered = null, ?string $currency = null, ?float $exchangeRate = null): void {
         // DB-backed list of active methods for the company; the legacy hardcoded
         // list remains the fallback when the table is missing or empty, and an
         // unknown/inactive code still falls back to bank_transfer as before.
@@ -1002,25 +1131,48 @@ if (!function_exists('salesInsertPayment')) {
         }
         $method = in_array($method, $allowedMethods, true) ? $method : 'bank_transfer';
 
+        $amount = moneyRound($amount);
+
+        // Resolve the invoice's currency and rate when the caller did not pass
+        // them, so a payment always carries the same translation as its bill.
+        if ($currency === null || $currency === '' || $exchangeRate === null || $exchangeRate <= 0) {
+            $invoiceStmt = $pdo->prepare("SELECT currency, exchange_rate FROM sales_invoices WHERE invoice_id = ?");
+            $invoiceStmt->execute([$invoiceId]);
+            $invoiceRow = $invoiceStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            if ($currency === null || $currency === '') {
+                $currency = (string) ($invoiceRow['currency'] ?? 'NGN');
+            }
+            if ($exchangeRate === null || $exchangeRate <= 0) {
+                $exchangeRate = (float) ($invoiceRow['exchange_rate'] ?? 1);
+            }
+        }
+        $currency = strtoupper(trim((string) $currency)) ?: 'NGN';
+        $exchangeRate = $exchangeRate > 0 ? (float) $exchangeRate : 1.0;
+        $baseAmount = toBaseAmount($amount, $exchangeRate);
+
         // amount is what the bill absorbed; tendered is what came across the
         // counter. Keeping them apart is what lets a reprint show the change
         // that was handed back, and what keeps the drawer formula honest.
         $tenderedOut = null;
         if ($tendered !== null && $tendered > 0 && $tendered + 0.005 >= $amount) {
-            $tenderedOut = salesRound($tendered);
+            $tenderedOut = moneyRound($tendered);
         }
 
         $stmt = $pdo->prepare("
             INSERT INTO customer_payments (company_id, customer_id, invoice_id, shift_id, amount,
-                tendered_amount, payment_date, payment_method, reference_number, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                currency, exchange_rate, base_amount, tendered_amount, payment_date, payment_method,
+                reference_number, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $companyId,
             $customerId,
             $invoiceId,
             $shiftId > 0 ? $shiftId : null,
-            salesRound($amount),
+            $amount,
+            $currency,
+            $exchangeRate,
+            $baseAmount,
             $tenderedOut,
             date('Y-m-d'),
             $method,
@@ -1034,17 +1186,35 @@ if (!function_exists('salesInsertPayment')) {
  * Recompute invoice paid/owed/status from its payment rows.
  */
 function refreshInvoicePaymentStatus(PDO $pdo, int $invoiceId): bool {
-    $stmt = $pdo->prepare("SELECT total_amount FROM sales_invoices WHERE invoice_id = ?");
+    $stmt = $pdo->prepare(
+        "SELECT total_amount, base_total_amount, currency, exchange_rate
+         FROM sales_invoices WHERE invoice_id = ?"
+    );
     $stmt->execute([$invoiceId]);
-    $total = $stmt->fetchColumn();
-    if ($total === false) {
+    $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$invoice) {
         return false;
     }
+    $total = (float) $invoice['total_amount'];
+    $exchangeRate = (float) ($invoice['exchange_rate'] ?? 1);
+    if ($exchangeRate <= 0) {
+        $exchangeRate = 1.0;
+    }
+    $baseTotal = (float) ($invoice['base_total_amount'] ?? 0);
+    if ($baseTotal <= 0) {
+        $baseTotal = toBaseAmount($total, $exchangeRate);
+    }
 
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM customer_payments WHERE invoice_id = ?");
+    $stmt = $pdo->prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS paid, COALESCE(SUM(base_amount), 0) AS base_paid
+         FROM customer_payments WHERE invoice_id = ?"
+    );
     $stmt->execute([$invoiceId]);
-    $paid = salesRound((float) $stmt->fetchColumn());
-    $owed = salesRound(max(0, (float) $total - $paid));
+    $paidRow = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['paid' => 0, 'base_paid' => 0];
+    $paid = moneyRound((float) $paidRow['paid']);
+    $basePaid = moneyRound((float) $paidRow['base_paid']);
+    $owed = moneyRound(max(0, $total - $paid));
+    $baseOwed = moneyRound(max(0, $baseTotal - $basePaid));
 
     if ($owed <= 0) {
         $status = 'paid';
@@ -1055,13 +1225,15 @@ function refreshInvoicePaymentStatus(PDO $pdo, int $invoiceId): bool {
     }
 
     $stmt = $pdo->prepare("
-        UPDATE sales_invoices SET amount_paid = ?, amount_owed = ?, status = ?,
-            paid_date = ?, updated_at = NOW()
+        UPDATE sales_invoices SET amount_paid = ?, amount_owed = ?, base_amount_paid = ?, base_amount_owed = ?,
+            status = ?, paid_date = ?, updated_at = NOW()
         WHERE invoice_id = ?
     ");
     return $stmt->execute([
         $paid,
         $owed,
+        $basePaid,
+        $baseOwed,
         $status,
         $status === 'paid' ? date('Y-m-d') : null,
         $invoiceId,
@@ -1073,13 +1245,14 @@ function refreshInvoicePaymentStatus(PDO $pdo, int $invoiceId): bool {
  */
 function recordPayment(PDO $pdo, int $customerId, ?int $saleId, float $amount, string $paymentMethod,
     string $referenceNumber = '', string $notes = ''): bool {
-    $amount = salesRound($amount);
+    $amount = moneyRound($amount);
     if ($amount <= 0 || !$saleId) {
         return false;
     }
 
     $stmt = $pdo->prepare("
-        SELECT invoice_id, company_id, customer_id, total_amount, amount_paid, status
+        SELECT invoice_id, company_id, customer_id, total_amount, amount_paid, status,
+               currency, exchange_rate
         FROM sales_invoices WHERE invoice_id = ? FOR UPDATE
     ");
 
@@ -1092,7 +1265,7 @@ function recordPayment(PDO $pdo, int $customerId, ?int $saleId, float $amount, s
             return false;
         }
 
-        $remaining = salesRound((float) $invoice['total_amount'] - (float) $invoice['amount_paid']);
+        $remaining = moneyRound((float) $invoice['total_amount'] - (float) $invoice['amount_paid']);
         if ($amount > $remaining + 0.0001) {
             $amount = $remaining;
         }
@@ -1102,7 +1275,8 @@ function recordPayment(PDO $pdo, int $customerId, ?int $saleId, float $amount, s
         }
 
         salesInsertPayment($pdo, (int) $invoice['company_id'], $customerId, $saleId,
-            $amount, $paymentMethod, $referenceNumber, $notes);
+            $amount, $paymentMethod, $referenceNumber, $notes, 0, null,
+            (string) ($invoice['currency'] ?? 'NGN'), (float) ($invoice['exchange_rate'] ?? 1));
         refreshInvoicePaymentStatus($pdo, $saleId);
         $pdo->commit();
     } catch (Throwable $e) {
@@ -1162,7 +1336,7 @@ function updateSaleStatus(PDO $pdo, int $saleId, string $status): bool {
                 continue;
             }
             $cost = (float) $item['unit_cost'];
-            $value = salesRound($cost * (float) $item['quantity']);
+            $value = moneyRound($cost * (float) $item['quantity']);
             $restockStmt->execute([
                 $item['quantity'], $value, $item['product_id'], $invoice['branch_id'],
             ]);
@@ -1288,8 +1462,8 @@ function posAddLine(PDO $pdo, int $productId, float $quantity, ?int $branchId = 
             'sku' => $product['sku'] ?? '',
             'barcode' => $product['barcode'] ?? '',
             'quantity' => salesRound($quantity),
-            'unit_price' => salesRound((float) ($product['sales_price'] ?? 0)),
-            'unit_cost' => salesRound((float) ($product['cost_price'] ?? 0)),
+            'unit_price' => moneyRound((float) ($product['sales_price'] ?? 0)),
+            'unit_cost' => moneyRound((float) ($product['cost_price'] ?? 0)),
             'discount_percent' => max(0, min(100, $discountPercent)),
         ];
     }
@@ -1439,8 +1613,8 @@ function recalculatePosTotals(PDO $pdo): void {
         foreach ($cart as &$item) {
             $row = $fresh[(int) $item['product_id']] ?? null;
             if ($row) {
-                $item['unit_price'] = salesRound((float) $row['sales_price']);
-                $item['unit_cost'] = salesRound((float) $row['cost_price']);
+                $item['unit_price'] = moneyRound((float) $row['sales_price']);
+                $item['unit_cost'] = moneyRound((float) $row['cost_price']);
                 $item['product_name'] = (string) $row['name'];
                 $item['sku'] = (string) ($row['sku'] ?? '');
                 $item['barcode'] = (string) ($row['barcode'] ?? '');
@@ -1459,14 +1633,14 @@ function recalculatePosTotals(PDO $pdo): void {
     }
 
     $taxRate = (float) salesSetting($pdo, 'default_tax_rate', '0');
-    $subtotal = salesRound($subtotal);
-    $taxAmount = salesRound($subtotal * $taxRate);
+    $subtotal = moneyRound($subtotal);
+    $taxAmount = moneyRound($subtotal * $taxRate);
 
     $_SESSION['pos_subtotal'] = $subtotal;
     $_SESSION['pos_discount'] = 0.0;
     $_SESSION['pos_tax_rate'] = $taxRate;
     $_SESSION['pos_tax'] = $taxAmount;
-    $_SESSION['pos_total'] = salesRound($subtotal + $taxAmount);
+    $_SESSION['pos_total'] = moneyRound($subtotal + $taxAmount);
 }
 
 /**
@@ -1593,7 +1767,7 @@ function posCheckout(PDO $pdo, array $paymentData = []): array {
         $method = (string) ($paymentData['payment_method'] ?? 'cash');
         $tenders = [[
             'method' => $method,
-            'amount' => salesRound((float) ($paymentData['payment_amount'] ?? $total)),
+            'amount' => moneyRound((float) ($paymentData['payment_amount'] ?? $total)),
             'reference' => trim((string) ($paymentData['reference_number'] ?? '')),
             'applied' => 0.0,
         ]];
@@ -1605,8 +1779,8 @@ function posCheckout(PDO $pdo, array $paymentData = []): array {
         if ($sum + 0.0001 < $total) {
             return [
                 'success' => false, 'invoice_id' => 0, 'total' => $total, 'change' => 0,
-                'message' => 'The payments entered total ' . number_format($sum, 2) . ' but the sale is '
-                    . number_format($total, 2) . '.',
+                'message' => 'The payments entered total ' . formatPrice($sum) . ' but the sale is '
+                    . formatPrice($total) . '.',
             ];
         }
     }

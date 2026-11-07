@@ -79,8 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ((array) $accountIds as $index => $accountId) {
             $lines[] = [
                 'account_id' => (int) $accountId,
-                'debit' => (float) ($debits[$index] ?? 0),
-                'credit' => (float) ($credits[$index] ?? 0),
+                'debit' => moneyInput($debits[$index] ?? 0),
+                'credit' => moneyInput($credits[$index] ?? 0),
                 'description' => trim((string) ($descriptions[$index] ?? '')),
             ];
         }
@@ -146,5 +146,7 @@ if ($view === 'accounts') {
 } else {
     $pageTitle = 'Journal Entries';
 }
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/ledger.html';

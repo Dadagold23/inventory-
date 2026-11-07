@@ -5,8 +5,8 @@ $pageDescription = 'Categories, expenses, payments and overdue tracking.';
 $activeNav = 'expense';
 ob_start();
 ?>
-<span class="badge bg-primary align-self-center">Total: <?php echo formatPrice($totalExpenses); ?></span>
-<span class="badge bg-warning align-self-center">Unpaid: <?php echo formatPrice($totalUnpaid); ?></span>
+<span class="badge bg-primary align-self-center">Total: <?php echo formatPrice($totalExpenses, null, $companyCurrency); ?></span>
+<span class="badge bg-warning align-self-center">Unpaid: <?php echo formatPrice($totalUnpaid, null, $companyCurrency); ?></span>
 <?php
 $pageActions = ob_get_clean();
 require APP_ROOT . '/views/layout/header.php';
@@ -76,7 +76,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         </td>
                                         <td><?php echo e($row['code'] ?? '—'); ?></td>
                                         <td class="text-end"><?php echo (int) $row['expense_count']; ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total'], null, $companyCurrency); ?></td>
                                         <td><span class="badge bg-<?php echo (int) $row['is_active'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $row['is_active'] === 1 ? 'Active' : 'Inactive'; ?></span></td>
                                         <td class="text-end">
                                             <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/expense?action=categories&edit_category=' . (int) $row['category_id'])); ?>"><i class="fas fa-edit"></i></a>
@@ -161,8 +161,8 @@ require APP_ROOT . '/views/layout/header.php';
                                     <textarea class="form-control" id="description" name="description" rows="2" required><?php echo e($expense['description'] ?? ''); ?></textarea>
                                 </div>
                                 <div class="row g-2 mb-3">
-                                    <div class="col-4"><label class="form-label" for="amount">Amount</label><input class="form-control expense-calc" type="number" step="0.0001" min="0" id="amount" name="amount" value="<?php echo e($expense['amount'] ?? '0.0000'); ?>"></div>
-                                    <div class="col-4"><label class="form-label" for="tax_amount">Tax</label><input class="form-control expense-calc" type="number" step="0.0001" min="0" id="tax_amount" name="tax_amount" value="<?php echo e($expense['tax_amount'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-4"><label class="form-label" for="amount">Amount</label><input class="form-control expense-calc" type="number" step="1" min="0" id="amount" name="amount" value="<?php echo e(number_format((float) ($expense['amount'] ?? 0), 0, '.', '')); ?>"></div>
+                                    <div class="col-4"><label class="form-label" for="tax_amount">Tax</label><input class="form-control expense-calc" type="number" step="1" min="0" id="tax_amount" name="tax_amount" value="<?php echo e(number_format((float) ($expense['tax_amount'] ?? 0), 0, '.', '')); ?>"></div>
                                     <div class="col-4"><label class="form-label" for="total_display">Total</label><input class="form-control" id="total_display" value="<?php echo e($expense['total_amount'] ?? '0.0000'); ?>" readonly></div>
                                 </div>
                                 <div class="row g-2 mb-3">
@@ -216,7 +216,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         <td><?php echo e($row['category_name'] ?? '—'); ?></td>
                                         <td><?php echo e($row['supplier_name'] ?? '—'); ?></td>
                                         <td><?php echo e($row['expense_date']); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount'], null, $companyCurrency); ?></td>
                                         <td><span class="badge bg-<?php echo ['paid' => 'success', 'partial' => 'warning', 'cancelled' => 'danger'][$row['payment_status']] ?? 'secondary'; ?>"><?php echo e($row['payment_status']); ?></span></td>
                                         <td class="text-end text-nowrap">
                                             <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/expense?action=expenses&expense_id=' . (int) $row['expense_id'])); ?>"><i class="fas fa-edit"></i></a>
@@ -250,13 +250,13 @@ require APP_ROOT . '/views/layout/header.php';
                 <div class="col-12 col-md-4">
                     <div class="card text-white bg-primary border-0 shadow-sm"><div class="card-body">
                         <div class="small text-uppercase">Total expenses</div>
-                        <div class="fs-4 fw-semibold"><?php echo formatPrice($totalExpenses); ?></div>
+                        <div class="fs-4 fw-semibold"><?php echo formatPrice($totalExpenses, null, $companyCurrency); ?></div>
                     </div></div>
                 </div>
                 <div class="col-12 col-md-4">
                     <div class="card text-white bg-warning border-0 shadow-sm"><div class="card-body">
                         <div class="small text-uppercase">Unpaid</div>
-                        <div class="fs-4 fw-semibold"><?php echo formatPrice($totalUnpaid); ?></div>
+                        <div class="fs-4 fw-semibold"><?php echo formatPrice($totalUnpaid, null, $companyCurrency); ?></div>
                     </div></div>
                 </div>
                 <div class="col-12 col-md-4">
@@ -282,7 +282,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><?php echo e($row['category_name']); ?></td>
                                         <td class="text-end"><?php echo (int) $row['expense_count']; ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total'], null, $companyCurrency); ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -304,7 +304,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><span class="badge bg-secondary"><?php echo e($row['payment_status']); ?></span></td>
                                         <td class="text-end"><?php echo (int) $row['count']; ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['grand_total'], null, $companyCurrency); ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -328,7 +328,7 @@ require APP_ROOT . '/views/layout/header.php';
                                 <td><?php echo e($row['expense_number']); ?></td>
                                 <td><?php echo e($row['expense_date']); ?></td>
                                 <td><?php echo e($row['supplier_name'] ?? '—'); ?></td>
-                                <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['total_amount'], null, $companyCurrency); ?></td>
                                 <td class="text-end"><?php echo (int) $row['days_overdue']; ?></td>
                             </tr>
                             <?php endforeach; ?>

@@ -132,9 +132,9 @@ require APP_ROOT . '/views/layout/header.php';
                     <?php if ($report['report_type'] === 'income_statement'): ?>
                     <?php $net = (float) ($reportData['net_income'] ?? 0); ?>
                     <div class="row g-3 mb-3">
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total income</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['income_total'] ?? 0)); ?></div></div></div>
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total expenses</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['expense_total'] ?? 0)); ?></div></div></div>
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Net income</div><div class="h5 mb-0 text-<?php echo $net >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice($net); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total income</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['income_total'] ?? 0), null, $companyCurrency); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total expenses</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['expense_total'] ?? 0), null, $companyCurrency); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Net income</div><div class="h5 mb-0 text-<?php echo $net >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice($net, null, $companyCurrency); ?></div></div></div>
                     </div>
                     <div class="row g-4">
                         <div class="col-12 col-lg-6">
@@ -144,10 +144,10 @@ require APP_ROOT . '/views/layout/header.php';
                                 <tbody>
                                     <?php if (($reportData['income_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No income recorded for this period.</td></tr><?php endif; ?>
                                     <?php foreach (($reportData['income_rows'] ?? []) as $line): ?>
-                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount'], null, $companyCurrency); ?></td></tr>
                                     <?php endforeach; ?>
                                 </tbody>
-                                <tfoot><tr class="fw-semibold"><td>Total income</td><td class="text-end"><?php echo formatPrice((float) ($reportData['income_total'] ?? 0)); ?></td></tr></tfoot>
+                                <tfoot><tr class="fw-semibold"><td>Total income</td><td class="text-end"><?php echo formatPrice((float) ($reportData['income_total'] ?? 0), null, $companyCurrency); ?></td></tr></tfoot>
                             </table>
                         </div>
                         <div class="col-12 col-lg-6">
@@ -157,10 +157,10 @@ require APP_ROOT . '/views/layout/header.php';
                                 <tbody>
                                     <?php if (($reportData['expense_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No expenses recorded for this period.</td></tr><?php endif; ?>
                                     <?php foreach (($reportData['expense_rows'] ?? []) as $line): ?>
-                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount'], null, $companyCurrency); ?></td></tr>
                                     <?php endforeach; ?>
                                 </tbody>
-                                <tfoot><tr class="fw-semibold"><td>Total expenses</td><td class="text-end"><?php echo formatPrice((float) ($reportData['expense_total'] ?? 0)); ?></td></tr></tfoot>
+                                <tfoot><tr class="fw-semibold"><td>Total expenses</td><td class="text-end"><?php echo formatPrice((float) ($reportData['expense_total'] ?? 0), null, $companyCurrency); ?></td></tr></tfoot>
                             </table>
                         </div>
                     </div>
@@ -169,13 +169,13 @@ require APP_ROOT . '/views/layout/header.php';
                     <?php if ($report['report_type'] === 'balance_sheet'): ?>
                     <?php $check = (float) ($reportData['balance_check'] ?? 0); ?>
                     <div class="row g-3 mb-3">
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total assets</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['asset_total'] ?? 0)); ?></div></div></div>
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Liabilities</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['liability_total'] ?? 0)); ?></div></div></div>
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Equity (incl. retained)</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['total_equity'] ?? 0)); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total assets</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['asset_total'] ?? 0), null, $companyCurrency); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Liabilities</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['liability_total'] ?? 0), null, $companyCurrency); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Equity (incl. retained)</div><div class="h5 mb-0"><?php echo formatPrice((float) ($reportData['total_equity'] ?? 0), null, $companyCurrency); ?></div></div></div>
                     </div>
                     <div class="mb-3">
                         <span class="badge bg-<?php echo abs($check) < 0.0001 ? 'success' : 'warning text-dark'; ?>">
-                            <?php echo abs($check) < 0.0001 ? 'Assets balance to liabilities and equity' : 'Out of balance by ' . formatPrice(abs($check)); ?>
+                            <?php echo abs($check) < 0.0001 ? 'Assets balance to liabilities and equity' : 'Out of balance by ' . formatPrice(abs($check), null, $companyCurrency); ?>
                         </span>
                     </div>
                     <div class="row g-4">
@@ -191,13 +191,13 @@ require APP_ROOT . '/views/layout/header.php';
                                 <tbody>
                                     <?php if ($section['rows'] === []): ?><tr><td colspan="2" class="text-muted">No <?php echo strtolower($sectionTitle); ?> accounts with activity.</td></tr><?php endif; ?>
                                     <?php foreach ($section['rows'] as $line): ?>
-                                    <tr><td><?php echo e($line['account_code'] . ' — ' . $line['account_name']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['balance']); ?></td></tr>
+                                    <tr><td><?php echo e($line['account_code'] . ' — ' . $line['account_name']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['balance'], null, $companyCurrency); ?></td></tr>
                                     <?php endforeach; ?>
                                     <?php if ($sectionTitle === 'Equity'): ?>
-                                    <tr class="fst-italic"><td>Retained earnings</td><td class="text-end"><?php echo formatPrice((float) ($reportData['retained_earnings'] ?? 0)); ?></td></tr>
+                                    <tr class="fst-italic"><td>Retained earnings</td><td class="text-end"><?php echo formatPrice((float) ($reportData['retained_earnings'] ?? 0), null, $companyCurrency); ?></td></tr>
                                     <?php endif; ?>
                                 </tbody>
-                                <tfoot><tr class="fw-semibold"><td>Total <?php echo strtolower($sectionTitle); ?></td><td class="text-end"><?php echo formatPrice($sectionTitle === 'Equity' ? (float) ($reportData['total_equity'] ?? 0) : (float) $section['total']); ?></td></tr></tfoot>
+                                <tfoot><tr class="fw-semibold"><td>Total <?php echo strtolower($sectionTitle); ?></td><td class="text-end"><?php echo formatPrice($sectionTitle === 'Equity' ? (float) ($reportData['total_equity'] ?? 0) : (float) $section['total'], null, $companyCurrency); ?></td></tr></tfoot>
                             </table>
                         </div>
                         <?php endforeach; ?>
@@ -207,9 +207,9 @@ require APP_ROOT . '/views/layout/header.php';
                     <?php if ($report['report_type'] === 'cash_flow'): ?>
                     <?php $netCash = (float) ($reportData['net_cash_flow'] ?? 0); ?>
                     <div class="row g-3 mb-3">
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total inflows</div><div class="h5 mb-0 text-success"><?php echo formatPrice((float) ($reportData['inflow_total'] ?? 0)); ?></div></div></div>
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total outflows</div><div class="h5 mb-0 text-danger"><?php echo formatPrice((float) ($reportData['outflow_total'] ?? 0)); ?></div></div></div>
-                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Net cash flow</div><div class="h5 mb-0 text-<?php echo $netCash >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice($netCash); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total inflows</div><div class="h5 mb-0 text-success"><?php echo formatPrice((float) ($reportData['inflow_total'] ?? 0), null, $companyCurrency); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Total outflows</div><div class="h5 mb-0 text-danger"><?php echo formatPrice((float) ($reportData['outflow_total'] ?? 0), null, $companyCurrency); ?></div></div></div>
+                        <div class="col-12 col-md-4"><div class="border rounded p-3"><div class="text-muted small">Net cash flow</div><div class="h5 mb-0 text-<?php echo $netCash >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice($netCash, null, $companyCurrency); ?></div></div></div>
                     </div>
                     <div class="row g-4">
                         <div class="col-12 col-lg-6">
@@ -219,10 +219,10 @@ require APP_ROOT . '/views/layout/header.php';
                                 <tbody>
                                     <?php if (($reportData['inflow_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No cash inflows for this period.</td></tr><?php endif; ?>
                                     <?php foreach (($reportData['inflow_rows'] ?? []) as $line): ?>
-                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount'], null, $companyCurrency); ?></td></tr>
                                     <?php endforeach; ?>
                                 </tbody>
-                                <tfoot><tr class="fw-semibold"><td>Total inflows</td><td class="text-end"><?php echo formatPrice((float) ($reportData['inflow_total'] ?? 0)); ?></td></tr></tfoot>
+                                <tfoot><tr class="fw-semibold"><td>Total inflows</td><td class="text-end"><?php echo formatPrice((float) ($reportData['inflow_total'] ?? 0), null, $companyCurrency); ?></td></tr></tfoot>
                             </table>
                         </div>
                         <div class="col-12 col-lg-6">
@@ -232,10 +232,10 @@ require APP_ROOT . '/views/layout/header.php';
                                 <tbody>
                                     <?php if (($reportData['outflow_rows'] ?? []) === []): ?><tr><td colspan="2" class="text-muted">No cash outflows for this period.</td></tr><?php endif; ?>
                                     <?php foreach (($reportData['outflow_rows'] ?? []) as $line): ?>
-                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount']); ?></td></tr>
+                                    <tr><td><?php echo e($line['label']); ?></td><td class="text-end"><?php echo formatPrice((float) $line['amount'], null, $companyCurrency); ?></td></tr>
                                     <?php endforeach; ?>
                                 </tbody>
-                                <tfoot><tr class="fw-semibold"><td>Total outflows</td><td class="text-end"><?php echo formatPrice((float) ($reportData['outflow_total'] ?? 0)); ?></td></tr></tfoot>
+                                <tfoot><tr class="fw-semibold"><td>Total outflows</td><td class="text-end"><?php echo formatPrice((float) ($reportData['outflow_total'] ?? 0), null, $companyCurrency); ?></td></tr></tfoot>
                             </table>
                         </div>
                     </div>
@@ -245,7 +245,7 @@ require APP_ROOT . '/views/layout/header.php';
                     <?php $tbDebit = (float) ($reportData['total_debit'] ?? 0); $tbCredit = (float) ($reportData['total_credit'] ?? 0); ?>
                     <div class="mb-3">
                         <span class="badge bg-<?php echo abs($tbDebit - $tbCredit) < 0.0001 ? 'success' : 'danger'; ?>">
-                            Debits <?php echo formatPrice($tbDebit); ?> / Credits <?php echo formatPrice($tbCredit); ?>
+                            Debits <?php echo formatPrice($tbDebit, null, $companyCurrency); ?> / Credits <?php echo formatPrice($tbCredit, null, $companyCurrency); ?>
                         </span>
                     </div>
                     <div class="table-responsive">
@@ -258,12 +258,12 @@ require APP_ROOT . '/views/layout/header.php';
                                     <td><?php echo e($line['account_code']); ?></td>
                                     <td><?php echo e($line['account_name']); ?></td>
                                     <td><span class="badge bg-secondary"><?php echo e($line['account_type']); ?></span></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['debit_total']); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['credit_total']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['debit_total'], null, $companyCurrency); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['credit_total'], null, $companyCurrency); ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
-                            <tfoot><tr class="fw-semibold"><td colspan="3">Totals</td><td class="text-end"><?php echo formatPrice($tbDebit); ?></td><td class="text-end"><?php echo formatPrice($tbCredit); ?></td></tr></tfoot>
+                            <tfoot><tr class="fw-semibold"><td colspan="3">Totals</td><td class="text-end"><?php echo formatPrice($tbDebit, null, $companyCurrency); ?></td><td class="text-end"><?php echo formatPrice($tbCredit, null, $companyCurrency); ?></td></tr></tfoot>
                         </table>
                     </div>
                     <?php endif; ?>
@@ -280,12 +280,12 @@ require APP_ROOT . '/views/layout/header.php';
                                     <td><?php echo e($line['entry_number']); ?></td>
                                     <td><?php echo e(trim(($line['account_code'] ?? '') . ' — ' . ($line['account_name'] ?? ''), ' —')); ?></td>
                                     <td><?php echo e($line['description'] ?: ($line['entry_description'] ?? '')); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['debit_amount']); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['credit_amount']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['debit_amount'], null, $companyCurrency); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['credit_amount'], null, $companyCurrency); ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
-                            <tfoot><tr class="fw-semibold"><td colspan="4">Totals</td><td class="text-end"><?php echo formatPrice((float) ($reportData['total_debit'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($reportData['total_credit'] ?? 0)); ?></td></tr></tfoot>
+                            <tfoot><tr class="fw-semibold"><td colspan="4">Totals</td><td class="text-end"><?php echo formatPrice((float) ($reportData['total_debit'] ?? 0), null, $companyCurrency); ?></td><td class="text-end"><?php echo formatPrice((float) ($reportData['total_credit'] ?? 0), null, $companyCurrency); ?></td></tr></tfoot>
                         </table>
                     </div>
                     <?php endif; ?>
@@ -323,16 +323,16 @@ require APP_ROOT . '/views/layout/header.php';
                     </form>
 
                     <div class="row g-3 mb-3">
-                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Net sales</div><div class="h5 mb-0"><?php echo formatPrice((float) ($analyticsSummary['net'] ?? 0)); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['invoiced'] ?? 0)); ?> invoiced</div></div></div>
-                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Gross profit</div><div class="h5 mb-0 text-<?php echo (float) ($analyticsSummary['gross_profit'] ?? 0) >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice((float) ($analyticsSummary['gross_profit'] ?? 0)); ?></div><div class="small text-muted"><?php echo number_format((float) ($analyticsSummary['margin'] ?? 0), 1); ?>% margin</div></div></div>
-                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Transactions</div><div class="h5 mb-0"><?php echo (int) ($analyticsSummary['transactions'] ?? 0); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['average_sale'] ?? 0)); ?> average sale</div></div></div>
-                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Units sold</div><div class="h5 mb-0"><?php echo number_format((float) ($analyticsSummary['units'] ?? 0), 2); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['cogs'] ?? 0)); ?> cost of goods</div></div></div>
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Net sales</div><div class="h5 mb-0"><?php echo formatPrice((float) ($analyticsSummary['net'] ?? 0), null, $companyCurrency); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['invoiced'] ?? 0), null, $companyCurrency); ?> invoiced</div></div></div>
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Gross profit</div><div class="h5 mb-0 text-<?php echo (float) ($analyticsSummary['gross_profit'] ?? 0) >= 0 ? 'success' : 'danger'; ?>"><?php echo formatPrice((float) ($analyticsSummary['gross_profit'] ?? 0), null, $companyCurrency); ?></div><div class="small text-muted"><?php echo number_format((float) ($analyticsSummary['margin'] ?? 0), 1); ?>% margin</div></div></div>
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Transactions</div><div class="h5 mb-0"><?php echo (int) ($analyticsSummary['transactions'] ?? 0); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['average_sale'] ?? 0), null, $companyCurrency); ?> average sale</div></div></div>
+                        <div class="col-12 col-md-3"><div class="border rounded p-3"><div class="text-muted small">Units sold</div><div class="h5 mb-0"><?php echo number_format((float) ($analyticsSummary['units'] ?? 0), 2); ?></div><div class="small text-muted"><?php echo formatPrice((float) ($analyticsSummary['cogs'] ?? 0), null, $companyCurrency); ?> cost of goods</div></div></div>
                     </div>
 
                     <div class="d-flex flex-wrap gap-3 small text-muted mb-3">
-                        <span>Gross sales <?php echo formatPrice((float) ($analyticsSummary['gross'] ?? 0)); ?></span>
-                        <span>Discounts <?php echo formatPrice((float) ($analyticsSummary['discount_total'] ?? 0)); ?> (<?php echo number_format((float) ($analyticsSummary['discount_rate'] ?? 0), 1); ?>%)</span>
-                        <span>Tax <?php echo formatPrice((float) ($analyticsSummary['tax'] ?? 0)); ?></span>
+                        <span>Gross sales <?php echo formatPrice((float) ($analyticsSummary['gross'] ?? 0), null, $companyCurrency); ?></span>
+                        <span>Discounts <?php echo formatPrice((float) ($analyticsSummary['discount_total'] ?? 0), null, $companyCurrency); ?> (<?php echo number_format((float) ($analyticsSummary['discount_rate'] ?? 0), 1); ?>%)</span>
+                        <span>Tax <?php echo formatPrice((float) ($analyticsSummary['tax'] ?? 0), null, $companyCurrency); ?></span>
                         <span>Markup <?php echo number_format((float) ($analyticsSummary['markup'] ?? 0), 1); ?>%</span>
                     </div>
 
@@ -346,17 +346,17 @@ require APP_ROOT . '/views/layout/header.php';
                                     <td><?php echo e($line['label']); ?></td>
                                     <td class="text-end"><?php echo (int) $line['transactions']; ?></td>
                                     <td class="text-end"><?php echo number_format((float) $line['units'], 2); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['gross']); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['discount_total']); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['net']); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['tax']); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['cogs']); ?></td>
-                                    <td class="text-end"><?php echo formatPrice((float) $line['gross_profit']); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['gross'], null, $companyCurrency); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['discount_total'], null, $companyCurrency); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['net'], null, $companyCurrency); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['tax'], null, $companyCurrency); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['cogs'], null, $companyCurrency); ?></td>
+                                    <td class="text-end"><?php echo formatPrice((float) $line['gross_profit'], null, $companyCurrency); ?></td>
                                     <td class="text-end"><?php echo number_format((float) $line['margin'], 1); ?>%</td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
-                            <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end"><?php echo (int) ($analyticsSummary['transactions'] ?? 0); ?></td><td class="text-end"><?php echo number_format((float) ($analyticsSummary['units'] ?? 0), 2); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['gross'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['discount_total'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['net'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['tax'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['cogs'] ?? 0)); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['gross_profit'] ?? 0)); ?></td><td class="text-end"><?php echo number_format((float) ($analyticsSummary['margin'] ?? 0), 1); ?>%</td></tr></tfoot>
+                            <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end"><?php echo (int) ($analyticsSummary['transactions'] ?? 0); ?></td><td class="text-end"><?php echo number_format((float) ($analyticsSummary['units'] ?? 0), 2); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['gross'] ?? 0), null, $companyCurrency); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['discount_total'] ?? 0), null, $companyCurrency); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['net'] ?? 0), null, $companyCurrency); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['tax'] ?? 0), null, $companyCurrency); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['cogs'] ?? 0), null, $companyCurrency); ?></td><td class="text-end"><?php echo formatPrice((float) ($analyticsSummary['gross_profit'] ?? 0), null, $companyCurrency); ?></td><td class="text-end"><?php echo number_format((float) ($analyticsSummary['margin'] ?? 0), 1); ?>%</td></tr></tfoot>
                         </table>
                     </div>
                     <?php if (!empty($analytics['truncated'])): ?><p class="small text-warning">Showing the first 400 rows; narrow the period to see the rest.</p><?php endif; ?>
@@ -372,13 +372,13 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><?php echo e($tender['label']); ?><?php if ($tender['is_cash']): ?> <span class="badge bg-success">Cash</span><?php endif; ?></td>
                                         <td class="text-end"><?php echo (int) $tender['payment_count']; ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $tender['amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $tender['amount'], null, $companyCurrency); ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                                 <tfoot>
-                                    <tr class="fw-semibold"><td>Received</td><td></td><td class="text-end"><?php echo formatPrice((float) ($analytics['tender_total'] ?? 0)); ?></td></tr>
-                                    <tr><td class="text-muted small" colspan="2">Cash / non-cash</td><td class="text-end small"><?php echo formatPrice((float) ($analytics['cash_total'] ?? 0)); ?> / <?php echo formatPrice((float) ($analytics['non_cash_total'] ?? 0)); ?></td></tr>
+                                    <tr class="fw-semibold"><td>Received</td><td></td><td class="text-end"><?php echo formatPrice((float) ($analytics['tender_total'] ?? 0), null, $companyCurrency); ?></td></tr>
+                                    <tr><td class="text-muted small" colspan="2">Cash / non-cash</td><td class="text-end small"><?php echo formatPrice((float) ($analytics['cash_total'] ?? 0), null, $companyCurrency); ?> / <?php echo formatPrice((float) ($analytics['non_cash_total'] ?? 0), null, $companyCurrency); ?></td></tr>
                                 </tfoot>
                             </table>
                         </div>
@@ -386,9 +386,9 @@ require APP_ROOT . '/views/layout/header.php';
                             <h6 class="fw-semibold">Collection</h6>
                             <table class="table table-sm align-middle mb-0">
                                 <tbody>
-                                    <tr><td>Invoiced in this period</td><td class="text-end"><?php echo formatPrice((float) ($analyticsCollection['invoiced'] ?? 0)); ?></td></tr>
-                                    <tr><td>Received in this period</td><td class="text-end text-success"><?php echo formatPrice((float) ($analyticsCollection['collected_in_period'] ?? 0)); ?></td></tr>
-                                    <tr><td>Still outstanding on this period's bills</td><td class="text-end text-<?php echo (float) ($analyticsCollection['outstanding'] ?? 0) > 0 ? 'danger' : 'success'; ?>"><?php echo formatPrice((float) ($analyticsCollection['outstanding'] ?? 0)); ?></td></tr>
+                                    <tr><td>Invoiced in this period</td><td class="text-end"><?php echo formatPrice((float) ($analyticsCollection['invoiced'] ?? 0), null, $companyCurrency); ?></td></tr>
+                                    <tr><td>Received in this period</td><td class="text-end text-success"><?php echo formatPrice((float) ($analyticsCollection['collected_in_period'] ?? 0), null, $companyCurrency); ?></td></tr>
+                                    <tr><td>Still outstanding on this period's bills</td><td class="text-end text-<?php echo (float) ($analyticsCollection['outstanding'] ?? 0) > 0 ? 'danger' : 'success'; ?>"><?php echo formatPrice((float) ($analyticsCollection['outstanding'] ?? 0), null, $companyCurrency); ?></td></tr>
                                     <tr><td>Unpaid invoices</td><td class="text-end"><?php echo (int) ($analyticsCollection['unpaid_invoices'] ?? 0); ?></td></tr>
                                 </tbody>
                             </table>

@@ -54,7 +54,7 @@ function createBank(PDO $pdo, array $bankData): int {
         $bankData['name'] ?? '',
         $bankData['account_number'] ?? '',
         $bankData['account_type'] ?? 'checking',
-        $bankData['currency'] ?? 'USD',
+        $bankData['currency'] ?? 'NGN',
         $bankData['balance'] ?? 0.0000,
         $bankData['is_active'] ?? 1,
         $bankData['sort_order'] ?? 0,

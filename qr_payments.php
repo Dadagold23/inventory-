@@ -170,4 +170,6 @@ $pageHeading = 'QR Code Scan-to-Pay';
 $pageEyebrow = 'Administration';
 $activeNav = 'qr_payments';
 
+$companyCurrency = getCompanyCurrency($pdo);
+
 require APP_ROOT . '/views/qr_payments.html';

@@ -103,8 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $transactionId = createTaxTransaction($pdo, [
             'company_id' => $companyId,
             'tax_rate_id' => (int) ($_POST['tax_rate_id'] ?? 0),
-            'taxable_amount' => (float) ($_POST['taxable_amount'] ?? 0),
-            'tax_amount' => (float) ($_POST['tax_amount'] ?? 0),
+            'taxable_amount' => moneyInput($_POST['taxable_amount'] ?? 0),
+            'tax_amount' => moneyInput($_POST['tax_amount'] ?? 0),
             'transaction_type' => (string) ($_POST['transaction_type'] ?? 'sale'),
             'transaction_date' => (string) ($_POST['transaction_date'] ?? date('Y-m-d')),
             'reference_type' => trim((string) ($_POST['reference_type'] ?? '')),
@@ -155,5 +155,7 @@ $unreconciledCount = max(0, (int) $totals['transaction_count'] - (int) $totals['
 $pageTitle = $view === 'transactions'
     ? 'Tax Transactions'
     : ($view === 'summary' ? 'Tax Summary' : 'Tax Rates');
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/tax.html';

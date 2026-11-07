@@ -68,8 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'hire_date' => (string) ($_POST['hire_date'] ?? date('Y-m-d')),
             'termination_date' => trim((string) ($_POST['termination_date'] ?? '')),
             'employment_type' => (string) ($_POST['employment_type'] ?? 'full_time'),
-            'hourly_rate' => (float) ($_POST['hourly_rate'] ?? 0),
-            'salary' => (float) ($_POST['salary'] ?? 0),
+            'hourly_rate' => moneyInput($_POST['hourly_rate'] ?? 0),
+            'salary' => moneyInput($_POST['salary'] ?? 0),
             'tax_id' => trim((string) ($_POST['tax_id'] ?? '')),
             'address' => trim((string) ($_POST['address'] ?? '')),
             'is_active' => !empty($_POST['is_active']) ? 1 : 0,
@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'employee_id' => (int) ($_POST['employee_id'] ?? 0),
             'description' => trim((string) ($_POST['description'] ?? '')),
             'type' => (string) ($_POST['type'] ?? 'earning'),
-            'amount' => (float) ($_POST['amount'] ?? 0),
+            'amount' => moneyInput($_POST['amount'] ?? 0),
         ], $companyId);
 
         $_SESSION['auth_message'] = $lineId > 0
@@ -205,5 +205,7 @@ $draftRunCount = count(array_filter($payrollRuns, static fn(array $run): bool =>
 $processedRunCount = count(array_filter($payrollRuns, static fn(array $run): bool => $run['status'] === 'processed'));
 
 $pageTitle = $view === 'runs' ? 'Payroll Runs' : 'Employees';
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/payroll.html';

@@ -53,8 +53,8 @@ require APP_ROOT . '/views/layout/header.php';
                 <div class="col-12 col-sm-6 col-lg-3 mb-3">
                     <div class="card text-white bg-success o-h">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-dollar-sign me-2"></i>Total Stock Value</h5>
-                            <p class="card-text"><?php echo e(formatPrice($pdo, $totalStockValue) . ' ' . $currency); ?></p>
+                            <h5 class="card-title"><i class="fas fa-coins me-2"></i>Total Stock Value</h5>
+                            <p class="card-text"><?php echo e(formatPrice((float) $totalStockValue, null, $currency)); ?></p>
                         </div>
                     </div>
                 </div>
@@ -62,7 +62,7 @@ require APP_ROOT . '/views/layout/header.php';
                     <div class="card text-white bg-info o-h">
                         <div class="card-body">
                             <h5 class="card-title"><i class="fas fa-calculator me-2"></i>Avg. Cost</h5>
-                            <p class="card-text"><?php echo e(formatPrice($pdo, $averageCost) . ' ' . $currency); ?></p>
+                            <p class="card-text"><?php echo e(formatPrice((float) $averageCost, null, $currency)); ?></p>
                         </div>
                     </div>
                 </div>
@@ -126,7 +126,7 @@ require APP_ROOT . '/views/layout/header.php';
                                                     <?php echo e(number_format($rowStock['quantity'], 2)); ?>
                                                 </span>
                                             </td>
-                                            <td><?php echo e(formatPrice($pdo, $rowStock['value'])); ?></td>
+                                            <td><?php echo e(formatPrice((float) $rowStock['value'], null, $currency)); ?></td>
                                             <td><?php echo e(number_format($reorder, 0)); ?></td>
                                             <td>
                                                 <div class="btn-group btn-group-sm">
@@ -189,7 +189,7 @@ require APP_ROOT . '/views/layout/header.php';
                                             <td><?php echo e($item['sku'] ?? ''); ?></td>
                                             <td><strong><?php echo e(number_format((float) ($item['on_hand_quantity'] ?? 0), 2)); ?></strong></td>
                                             <td><?php echo e(number_format((float) ($item['reorder_level'] ?? 0), 0)); ?></td>
-                                            <td><?php echo e(formatPrice($pdo, $productStock[$itemId]['value'] ?? 0)); ?></td>
+                                            <td><?php echo e(formatPrice((float) $productStock[$itemId]['value'] ?? 0, null, $currency)); ?></td>
                                         </tr>
                                         <?php endforeach; ?>
                                         <?php if (count($lowStockItems) === 0): ?>
@@ -220,8 +220,8 @@ require APP_ROOT . '/views/layout/header.php';
                                     <p class="mb-1"><strong>Manage Stock:</strong> <?php echo !empty($product['manage_stock']) ? 'Yes' : 'No'; ?></p>
                                 </div>
                                 <div class="col-6 text-end">
-                                    <p class="mb-1"><strong>Sales Price:</strong> <?php echo e(formatPrice($pdo, (float) ($product['sales_price'] ?? 0))); ?></p>
-                                    <p class="mb-1"><strong>Cost Price:</strong> <?php echo e(formatPrice($pdo, (float) ($product['cost_price'] ?? 0))); ?></p>
+                                    <p class="mb-1"><strong>Sales Price:</strong> <?php echo e(formatPrice((float) ($product['sales_price'] ?? 0), null, $currency)); ?></p>
+                                    <p class="mb-1"><strong>Cost Price:</strong> <?php echo e(formatPrice((float) ($product['cost_price'] ?? 0), null, $currency)); ?></p>
                                     <p class="mb-1"><strong>Status:</strong> <?php echo !empty($product['is_active']) ? 'Active' : 'Inactive'; ?></p>
                                 </div>
                             </div>
@@ -244,7 +244,7 @@ require APP_ROOT . '/views/layout/header.php';
                                             <td><?php echo e(number_format((float) ($loc['on_hand_quantity'] ?? 0), 2)); ?></td>
                                             <td><?php echo e(number_format((float) ($loc['available_quantity'] ?? 0), 2)); ?></td>
                                             <td><?php echo e(number_format((float) ($loc['reserved_quantity'] ?? 0), 2)); ?></td>
-                                            <td><?php echo e(formatPrice($pdo, (float) ($loc['on_hand_value'] ?? 0))); ?></td>
+                                            <td><?php echo e(formatPrice((float) ($loc['on_hand_value'] ?? 0), null, $currency)); ?></td>
                                         </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -265,7 +265,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         <input type="number" step="0.01" min="0.01" class="form-control" name="receiving_quantity" placeholder="Quantity" required>
                                     </div>
                                     <div class="col-6">
-                                        <input type="number" step="0.0001" min="0" class="form-control" name="unit_cost" placeholder="Unit Cost" required>
+                                        <input type="number" step="1" min="0" class="form-control" name="unit_cost" placeholder="Unit Cost" required>
                                     </div>
                                 </div>
                                 <textarea class="form-control mb-2" name="receiving_notes" rows="2" placeholder="Receiving notes"></textarea>
@@ -282,7 +282,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         <input type="number" step="0.01" min="0.01" class="form-control" name="sale_quantity" placeholder="Quantity" required>
                                     </div>
                                     <div class="col-6">
-                                        <input type="number" step="0.0001" min="0" class="form-control" name="sales_price" placeholder="Sales Price" required>
+                                        <input type="number" step="1" min="0" class="form-control" name="sales_price" placeholder="Sales Price" required>
                                     </div>
                                 </div>
                                 <textarea class="form-control mb-2" name="sale_notes" rows="2" placeholder="Sale notes"></textarea>
@@ -299,7 +299,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         <input type="number" step="0.01" class="form-control" name="adjustment_quantity" placeholder="+ / - Quantity" required>
                                     </div>
                                     <div class="col-6">
-                                        <input type="number" step="0.0001" min="0" class="form-control" name="adjustment_cost" placeholder="Unit Cost (optional)">
+                                        <input type="number" step="1" min="0" class="form-control" name="adjustment_cost" placeholder="Unit Cost (optional)">
                                     </div>
                                 </div>
                                 <textarea class="form-control mb-2" name="adjustment_reason" rows="2" placeholder="Reason for adjustment"></textarea>
@@ -380,11 +380,11 @@ require APP_ROOT . '/views/layout/header.php';
                         <div class="row mb-3">
                             <div class="col-6">
                                 <label for="sales_price" class="form-label">Sales Price</label>
-                                <input type="number" step="0.0001" min="0" class="form-control" id="sales_price" name="sales_price" value="0" required>
+                                <input type="number" step="1" min="0" class="form-control" id="sales_price" name="sales_price" value="0" required>
                             </div>
                             <div class="col-6">
                                 <label for="cost_price" class="form-label">Cost Price</label>
-                                <input type="number" step="0.0001" min="0" class="form-control" id="cost_price" name="cost_price" value="0" required>
+                                <input type="number" step="1" min="0" class="form-control" id="cost_price" name="cost_price" value="0" required>
                             </div>
                         </div>
 

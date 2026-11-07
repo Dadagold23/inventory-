@@ -31,9 +31,9 @@ require APP_ROOT . '/views/layout/header.php';
                     <div class="card text-bg-info h-100">
                         <div class="card-body">
                             <h5 class="card-title"><?php echo e($cs['name']); ?></h5>
-                            <p class="card-text mb-1"><strong>Balance:</strong> <?php echo e(formatPrice((float) ($cs['balance'] ?? 0))); ?> <?php echo e($cs['currency'] ?? ''); ?></p>
-                            <p class="card-text mb-0 small">Deposits: <?php echo e(formatPrice((float) ($cs['total_deposits'] ?? 0))); ?></p>
-                            <p class="card-text mb-0 small">Withdrawals: <?php echo e(formatPrice((float) ($cs['total_withdrawals'] ?? 0))); ?></p>
+                            <p class="card-text mb-1"><strong>Balance:</strong> <?php echo e(formatPrice((float) ($cs['balance'] ?? 0), null, $cs['currency'] ?? $companyCurrency)); ?></p>
+                            <p class="card-text mb-0 small">Deposits: <?php echo e(formatPrice((float) ($cs['total_deposits'] ?? 0), null, $cs['currency'] ?? $companyCurrency)); ?></p>
+                            <p class="card-text mb-0 small">Withdrawals: <?php echo e(formatPrice((float) ($cs['total_withdrawals'] ?? 0), null, $cs['currency'] ?? $companyCurrency)); ?></p>
                         </div>
                     </div>
                 </div>
@@ -71,7 +71,7 @@ require APP_ROOT . '/views/layout/header.php';
                                 <td><?php echo e($b['account_number'] ?? ''); ?></td>
                                 <td><?php echo e(ucfirst($b['account_type'] ?? 'checking')); ?></td>
                                 <td><?php echo e($b['currency'] ?? ''); ?></td>
-                                <td class="text-end"><?php echo e(formatPrice((float) ($b['balance'] ?? 0))); ?></td>
+                                <td class="text-end"><?php echo e(formatPrice((float) ($b['balance'] ?? 0), null, $b['currency'] ?? $companyCurrency)); ?></td>
                                 <td><span class="badge bg-<?php echo !empty($b['is_active']) ? 'success' : 'secondary'; ?>"><?php echo !empty($b['is_active']) ? 'Active' : 'Inactive'; ?></span></td>
                                 <td class="text-end text-nowrap">
                                     <a class="btn btn-sm btn-outline-secondary" title="View"
@@ -84,7 +84,7 @@ require APP_ROOT . '/views/layout/header.php';
                                             data-bank-name="<?php echo e($b['name']); ?>"
                                             data-bank-account="<?php echo e($b['account_number'] ?? ''); ?>"
                                             data-bank-type="<?php echo e($b['account_type'] ?? 'checking'); ?>"
-                                            data-bank-currency="<?php echo e($b['currency'] ?? 'USD'); ?>"
+                                            data-bank-currency="<?php echo e($b['currency'] ?? $companyCurrency); ?>"
                                             data-bank-sort="<?php echo (int) ($b['sort_order'] ?? 0); ?>"
                                             data-bank-active="<?php echo !empty($b['is_active']) ? '1' : '0'; ?>">
                                         <i class="fas fa-pen"></i>
@@ -114,7 +114,7 @@ require APP_ROOT . '/views/layout/header.php';
                     <h5 class="card-title mb-0">
                         <i class="fas fa-list me-2"></i><?php echo e($bank['name']); ?> — Transactions
                     </h5>
-                    <span class="badge bg-info">Balance: <?php echo e(formatPrice((float) ($bank['balance'] ?? 0))); ?> <?php echo e($bank['currency'] ?? ''); ?></span>
+                    <span class="badge bg-info">Balance: <?php echo e(formatPrice((float) ($bank['balance'] ?? 0), null, $bank['currency'] ?? $companyCurrency)); ?></span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
@@ -139,8 +139,8 @@ require APP_ROOT . '/views/layout/header.php';
                                 <td><?php echo e(ucfirst($t['transaction_type'] ?? '')); ?></td>
                                 <td><?php echo e($t['description'] ?? ''); ?></td>
                                 <td><?php echo e($t['reference_number'] ?? ''); ?></td>
-                                <td class="text-end"><?php echo e(formatPrice((float) ($t['amount'] ?? 0))); ?></td>
-                                <td class="text-end"><?php echo e(formatPrice((float) ($t['balance_after'] ?? 0))); ?></td>
+                                <td class="text-end"><?php echo e(formatPrice((float) ($t['amount'] ?? 0), null, $bank['currency'] ?? $companyCurrency)); ?></td>
+                                <td class="text-end"><?php echo e(formatPrice((float) ($t['balance_after'] ?? 0), null, $bank['currency'] ?? $companyCurrency)); ?></td>
                                 <td><?php echo e(ucfirst($t['status'] ?? 'completed')); ?></td>
                             </tr>
                             <?php endforeach; ?>
@@ -182,13 +182,13 @@ require APP_ROOT . '/views/layout/header.php';
                             </div>
                             <div class="col-sm-6 mb-3">
                                 <label for="currency" class="form-label">Currency</label>
-                                <input type="text" class="form-control" id="currency" name="currency" maxlength="3" value="USD">
+                                <input type="text" class="form-control" id="currency" name="currency" maxlength="3" value="<?php echo e($companyCurrency); ?>">
                             </div>
                         </div>
                         <div class="row">
                             <div class="col-sm-6 mb-3">
                                 <label for="opening_balance" class="form-label">Opening balance</label>
-                                <input type="number" step="0.0001" class="form-control" id="opening_balance" name="opening_balance" value="0">
+                                <input type="number" step="1" class="form-control" id="opening_balance" name="opening_balance" value="0">
                                 <div class="form-text">Used only when creating an account.</div>
                             </div>
                             <div class="col-sm-6 mb-3">
@@ -245,7 +245,7 @@ require APP_ROOT . '/views/layout/header.php';
                             </div>
                             <div class="col-sm-6 mb-3">
                                 <label for="amount" class="form-label">Amount</label>
-                                <input type="number" step="0.0001" min="0.0001" class="form-control" id="amount" name="amount" required>
+                                <input type="number" step="1" min="1" class="form-control" id="amount" name="amount" required>
                             </div>
                         </div>
                         <div class="row">
@@ -282,7 +282,7 @@ require APP_ROOT . '/views/layout/header.php';
             document.getElementById('bank_name').value = editing ? trigger.dataset.bankName : '';
             document.getElementById('account_number').value = editing ? trigger.dataset.bankAccount : '';
             document.getElementById('account_type').value = editing ? trigger.dataset.bankType : 'checking';
-            document.getElementById('currency').value = editing ? trigger.dataset.bankCurrency : 'USD';
+            document.getElementById('currency').value = editing ? trigger.dataset.bankCurrency : '<?php echo e($companyCurrency); ?>';
             document.getElementById('sort_order').value = editing ? trigger.dataset.bankSort : '0';
             document.getElementById('opening_balance').value = '0';
             document.getElementById('opening_balance').disabled = !!editing;

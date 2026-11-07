@@ -77,7 +77,7 @@ function collectSalesLines(): array {
             'product_id' => (int) $productId,
             'description' => trim((string) ($descriptions[$index] ?? '')),
             'quantity' => $quantity,
-            'unit_price' => ($prices[$index] ?? '') === '' ? null : (float) $prices[$index],
+            'unit_price' => ($prices[$index] ?? '') === '' ? null : moneyInput($prices[$index]),
             'discount_percent' => (float) ($discounts[$index] ?? 0),
         ];
     }
@@ -115,7 +115,8 @@ if ($action === 'customers') {
                 'state' => trim((string) ($_POST['customer_state'] ?? '')),
                 'postal_code' => trim((string) ($_POST['customer_postal'] ?? '')),
                 'country' => trim((string) ($_POST['customer_country'] ?? '')),
-                'credit_limit' => (float) ($_POST['customer_credit_limit'] ?? 0),
+                'currency' => strtoupper(trim((string) ($_POST['customer_currency'] ?? ''))),
+                'credit_limit' => moneyInput($_POST['customer_credit_limit'] ?? 0),
                 'payment_terms' => trim((string) ($_POST['customer_payment_terms'] ?? 'Net 30')),
                 'is_active' => isset($_POST['customer_active']) ? 1 : 0,
                 'is_tax_exempt' => isset($_POST['customer_tax_exempt']) ? 1 : 0,
@@ -265,7 +266,7 @@ if ($action === 'sales' || $action === 'list' || $action === 'manage_sales') {
                 'due_date' => $_POST['due_date'] ?? date('Y-m-d', strtotime('+30 days')),
                 'discount_percent' => (float) ($_POST['discount_percent'] ?? 0),
                 'tax_rate' => (float) ($_POST['tax_rate'] ?? 0),
-                'amount_paid' => (float) ($_POST['amount_paid'] ?? 0),
+                'amount_paid' => moneyInput($_POST['amount_paid'] ?? 0),
                 'payment_method' => $_POST['payment_method'] ?? null,
                 'reference_number' => trim((string) ($_POST['reference_number'] ?? '')),
                 'notes' => trim((string) ($_POST['sale_notes'] ?? '')),
@@ -281,7 +282,7 @@ if ($action === 'sales' || $action === 'list' || $action === 'manage_sales') {
         if ($_POST['action'] === 'record_payment') {
             $invoiceId = (int) ($_POST['sale_id'] ?? 0);
             $customerId = (int) ($_POST['customer_id'] ?? 0);
-            $amount = (float) ($_POST['payment_amount'] ?? 0);
+            $amount = moneyInput($_POST['payment_amount'] ?? 0);
 
             if ($invoiceId > 0 && $customerId > 0 && $amount > 0
                 && recordPayment($pdo, $customerId, $invoiceId, $amount,
@@ -435,7 +436,7 @@ if ($action === 'pos') {
                         }
                         $tenders[] = [
                             'method' => trim($method),
-                            'amount' => (float) ($postedAmounts[$i] ?? 0),
+                            'amount' => moneyInput($postedAmounts[$i] ?? 0),
                             'reference' => trim((string) ($postedRefs[$i] ?? '')),
                         ];
                     }
@@ -444,7 +445,7 @@ if ($action === 'pos') {
                         'branch_id' => (int) $posBranchId,
                         'payments' => $tenders,
                         'payment_method' => trim((string) array_shift($postedMethods)) ?: 'cash',
-                        'payment_amount' => (float) ($postedAmounts[0] ?? 0),
+                        'payment_amount' => moneyInput($postedAmounts[0] ?? 0),
                         'reference_number' => trim((string) ($postedRefs[0] ?? '')),
                         'notes' => trim((string) ($_POST['payment_notes'] ?? '')),
                         'idempotency_key' => posNewIdempotencyKey(),
@@ -523,7 +524,7 @@ if ($action === 'pos') {
             $result = posCheckout($pdo, [
                 'branch_id' => (int) $posBranchId,
                 'payment_method' => $_POST['payment_method'] ?? 'cash',
-                'payment_amount' => (float) ($_POST['payment_amount'] ?? 0),
+                'payment_amount' => moneyInput($_POST['payment_amount'] ?? 0),
                 'reference_number' => trim((string) ($_POST['payment_reference'] ?? '')),
                 'notes' => trim((string) ($_POST['payment_notes'] ?? '')),
                 'idempotency_key' => posNewIdempotencyKey(),
@@ -698,5 +699,8 @@ $defaultTaxRate = getDefaultTaxRate($pdo);
 $paymentMethodOptions = salesPaymentMethodOptions($pdo, $companyId);
 
 $viewFile = 'views/sales.html';
+
+// Company currency — used as fallback for customers with no explicit currency set.
+$companyCurrency = getCompanyCurrency($pdo);
 
 require_once APP_ROOT . '/views/' . basename($viewFile);

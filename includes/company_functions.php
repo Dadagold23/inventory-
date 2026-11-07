@@ -59,9 +59,12 @@ function getCurrentCompany(PDO $pdo): array {
  */
 function getAllCompanies(PDO $pdo): array {
     $stmt = $pdo->query(
-        "SELECT company_id, name, tax_id, address, phone, email, currency,
-                fiscal_year_start, is_active, created_at, updated_at
-         FROM companies ORDER BY name"
+        "SELECT c.company_id, c.name, c.tax_id, c.address, c.phone, c.email, c.currency,
+                c.fiscal_year_start, c.is_active, c.created_at, c.updated_at,
+                (SELECT s.value FROM settings s
+                 WHERE s.company_id = c.company_id AND s.`key` = 'company_website'
+                 LIMIT 1) AS website
+         FROM companies c ORDER BY c.name"
     );
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -152,8 +155,17 @@ function appSettingDefinitions(PDO $pdo): array {
 
     return [
         'decimal_places' => [
-            'label' => 'Decimal places', 'type' => 'int', 'min' => 0, 'max' => 6, 'default' => '2',
-            'description' => 'Amount precision used on sales, income and reporting screens.',
+            'label' => 'Decimal places', 'type' => 'int', 'min' => 0, 'max' => 6, 'default' => '0',
+            'description' => 'Amount precision used on sales, income and reporting screens. Money is entered as whole numbers, so 0 is the default.',
+        ],
+        'currency_default' => [
+            'label' => 'Company currency', 'type' => 'select', 'default' => 'NGN',
+            'options' => ['NGN' => 'Nigerian Naira (₦)'],
+            'description' => 'The company ledger uses Naira; foreign sales are translated into it at the configured exchange rate.',
+        ],
+        'usd_to_ngn' => [
+            'label' => 'USD → NGN rate', 'type' => 'float', 'min' => 0.0001, 'max' => 1000000, 'default' => '1500',
+            'description' => 'Naira value of one US dollar. Used to post a dollar sale to the Naira ledger.',
         ],
         'default_tax_rate' => [
             'label' => 'Default tax rate (decimal)', 'type' => 'float', 'min' => 0, 'max' => 1, 'default' => '0',
@@ -490,21 +502,26 @@ function getBranchName(PDO $pdo, int $branchId): string {
 }
 
 /**
- * Get the configured currency code.
+ * Get the configured currency code for the current company.
+ * Defaults to NGN (Nigerian Naira) — the home currency of this business.
  */
 function getCompanyCurrency(PDO $pdo): string {
     $company = getCurrentCompany($pdo);
-    return $company['currency'] ?? 'USD';
+    $code = strtoupper(trim((string) ($company['currency'] ?? '')));
+    return $code !== '' ? $code : 'NGN';
 }
 
 /**
- * Format a currency amount.
+ * Format a currency amount using the company (or supplied) currency.
+ * Uses formatPrice() so all display logic is consistent:
+ *   NGN  → ₦1,234.56
+ *   USD  → $1,234.56
+ *   GBP  → £1,234.56
+ *   XYZ  → XYZ 1,234.56
  */
 function formatCurrency(PDO $pdo, float $amount, ?string $currency = null): string {
     $currency = $currency ?? getCompanyCurrency($pdo);
-    $decimals = (int) getCompanySetting($pdo, 'decimal_places', '2');
-
-    return number_format($amount, $decimals, '.', '') . ' ' . $currency;
+    return formatPrice($amount, null, $currency);
 }
 
 /**

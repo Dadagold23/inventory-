@@ -6,8 +6,8 @@ $activeNav = 'payment_received';
 ob_start();
 ?>
 <span class="badge bg-primary align-self-center">Payments: <?php echo count($payments); ?></span>
-<span class="badge bg-success align-self-center">Received: <?php echo formatPrice($totalReceived); ?></span>
-<span class="badge bg-warning align-self-center">Outstanding: <?php echo formatPrice($totalOutstanding); ?></span>
+<span class="badge bg-success align-self-center">Received: <?php echo formatPrice($totalReceived, null, $companyCurrency); ?></span>
+<span class="badge bg-warning align-self-center">Outstanding: <?php echo formatPrice($totalOutstanding, null, $companyCurrency); ?></span>
 <?php
 $pageActions = ob_get_clean();
 require APP_ROOT . '/views/layout/header.php';
@@ -45,14 +45,14 @@ require APP_ROOT . '/views/layout/header.php';
                                     <select class="form-select" id="invoice_id" name="invoice_id" required>
                                         <option value="">-- Select invoice --</option>
                                         <?php foreach ($invoices as $invoice): ?>
-                                        <option value="<?php echo (int) $invoice['invoice_id']; ?>" data-customer="<?php echo (int) $invoice['customer_id']; ?>"><?php echo e($invoice['invoice_number']); ?> &mdash; <?php echo e($invoice['customer_name']); ?> (<?php echo formatPrice((float) $invoice['total_amount'] - (float) $invoice['paid']); ?> due)</option>
+                                        <option value="<?php echo (int) $invoice['invoice_id']; ?>" data-customer="<?php echo (int) $invoice['customer_id']; ?>"><?php echo e($invoice['invoice_number']); ?> &mdash; <?php echo e($invoice['customer_name']); ?> (<?php echo formatPrice((float) $invoice['total_amount'] - (float) $invoice['paid'], null, (string) ($invoice['currency'] ?? $companyCurrency)); ?> due)</option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
                                 <div class="row g-2 mb-3">
                                     <div class="col-6">
                                         <label class="form-label" for="amount">Amount <span class="text-danger">*</span></label>
-                                        <input class="form-control" type="number" step="0.0001" min="0.0001" id="amount" name="amount" required>
+                                        <input class="form-control" type="number" step="1" min="1" id="amount" name="amount" required>
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label" for="payment_date">Payment date</label>
@@ -96,7 +96,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         <td><?php echo e($row['payment_date']); ?></td>
                                         <td><?php echo e($row['customer_name'] ?? '—'); ?></td>
                                         <td><?php echo e($row['invoice_number'] ?? '—'); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount'], null, (string) ($row['currency'] ?? $companyCurrency)); ?></td>
                                         <td><span class="badge bg-secondary"><?php echo e(str_replace('_', ' ', $row['payment_method'])); ?></span></td>
                                         <td><?php echo e($row['reference_number'] ?? '—'); ?></td>
                                     </tr>
@@ -122,7 +122,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <?php foreach ($outstanding as $row): ?>
                                     <tr>
                                         <td><?php echo e($row['customer_name']); ?></td>
-                                        <td class="text-end fw-semibold"><?php echo formatPrice((float) $row['outstanding_amount']); ?></td>
+                                        <td class="text-end fw-semibold"><?php echo formatPrice((float) $row['outstanding_amount'], null, $companyCurrency); ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -144,7 +144,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><?php echo e(str_replace('_', ' ', $row['payment_method'])); ?></td>
                                         <td class="text-end"><?php echo (int) $row['transaction_count']; ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount'], null, $companyCurrency); ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>

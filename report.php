@@ -100,4 +100,6 @@ foreach ($reports as $row) {
 
 $pageTitle = 'Financial Reports';
 
+$companyCurrency = getCompanyCurrency($pdo);
+
 require APP_ROOT . '/views/report.html';

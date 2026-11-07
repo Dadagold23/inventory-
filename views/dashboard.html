@@ -608,7 +608,7 @@ $today = new DateTimeImmutable('now');
                         <span class="stat-tag">Stock</span>
                     </div>
                     <div class="stat-label">Inventory value</div>
-                    <div class="stat-value"><?php echo e(formatPrice($summary['inventory_value'] ?? 0)); ?></div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['inventory_value'] ?? 0, null, $companyCurrency)); ?></div>
                     <div class="stat-foot">Current stock valuation</div>
                 </article>
             </div>
@@ -619,7 +619,7 @@ $today = new DateTimeImmutable('now');
                         <span class="stat-tag">Sales</span>
                     </div>
                     <div class="stat-label">Sales this month</div>
-                    <div class="stat-value"><?php echo e(formatPrice($summary['total_sales'] ?? 0)); ?></div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['total_sales'] ?? 0, null, $companyCurrency)); ?></div>
                     <div class="stat-foot">Invoices issued this month</div>
                 </article>
             </div>
@@ -630,7 +630,7 @@ $today = new DateTimeImmutable('now');
                         <span class="stat-tag">Income</span>
                     </div>
                     <div class="stat-label">Income this month</div>
-                    <div class="stat-value"><?php echo e(formatPrice($summary['total_income'] ?? 0)); ?></div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['total_income'] ?? 0, null, $companyCurrency)); ?></div>
                     <div class="stat-foot">Recorded income this month</div>
                 </article>
             </div>
@@ -641,7 +641,7 @@ $today = new DateTimeImmutable('now');
                         <span class="stat-tag">Spend</span>
                     </div>
                     <div class="stat-label">Expenses this month</div>
-                    <div class="stat-value"><?php echo e(formatPrice($summary['total_expenses'] ?? 0)); ?></div>
+                    <div class="stat-value"><?php echo e(formatPrice($summary['total_expenses'] ?? 0, null, $companyCurrency)); ?></div>
                     <div class="stat-foot">Operating costs this month</div>
                 </article>
             </div>
@@ -652,7 +652,7 @@ $today = new DateTimeImmutable('now');
                 <div class="mini-card">
                     <div>
                         <div class="mini-label">Cash balance</div>
-                        <div class="mini-value"><?php echo e(formatPrice($summary['cash_balance'] ?? 0)); ?></div>
+                        <div class="mini-value"><?php echo e(formatPrice($summary['cash_balance'] ?? 0, null, $companyCurrency)); ?></div>
                     </div>
                     <i class="bi bi-wallet2 mini-ico lime"></i>
                 </div>
@@ -661,7 +661,7 @@ $today = new DateTimeImmutable('now');
                 <div class="mini-card">
                     <div>
                         <div class="mini-label">Receivables</div>
-                        <div class="mini-value warn"><?php echo e(formatPrice($summary['outstanding_receivables'] ?? 0)); ?></div>
+                        <div class="mini-value warn"><?php echo e(formatPrice($summary['outstanding_receivables'] ?? 0, null, $companyCurrency)); ?></div>
                     </div>
                     <i class="bi bi-arrow-down-left-circle mini-ico orange"></i>
                 </div>
@@ -670,7 +670,7 @@ $today = new DateTimeImmutable('now');
                 <div class="mini-card">
                     <div>
                         <div class="mini-label">Payables</div>
-                        <div class="mini-value"><?php echo e(formatPrice($summary['outstanding_payables'] ?? 0)); ?></div>
+                        <div class="mini-value"><?php echo e(formatPrice($summary['outstanding_payables'] ?? 0, null, $companyCurrency)); ?></div>
                     </div>
                     <i class="bi bi-arrow-up-right-circle mini-ico blue"></i>
                 </div>
@@ -764,7 +764,7 @@ $today = new DateTimeImmutable('now');
                                             <td><span class="num"><?php echo e($invoice['invoice_number']); ?></span></td>
                                             <td><?php echo e($invoice['customer_name'] ?? '—'); ?></td>
                                             <td><?php echo e($issued); ?></td>
-                                            <td class="text-end"><span class="num"><?php echo e(formatPrice($invoice['total_amount'])); ?></span></td>
+                                            <td class="text-end"><span class="num"><?php echo e(formatPrice($invoice['total_amount'], null, (string) ($invoice['currency'] ?? $companyCurrency))); ?></span></td>
                                             <td><span class="status <?php echo e($statusClass); ?>"><?php echo e(ucfirst($status)); ?></span></td>
                                         </tr>
                                     <?php endforeach; ?>

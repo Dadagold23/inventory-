@@ -44,7 +44,7 @@
 
     var money = function (value) {
         var node = document.createElement('div');
-        node.textContent = Number(value || 0).toFixed(2);
+        node.textContent = String(Math.round(Number(value || 0)));
         return node.textContent;
     };
     var state = {
@@ -384,11 +384,11 @@
         c2.className = 'col-4';
         var amountInput = document.createElement('input');
         amountInput.type = 'number';
-        amountInput.step = '0.01';
+        amountInput.step = '1';
         amountInput.min = '0';
         amountInput.className = 'form-control form-control-sm tender-amount';
         amountInput.placeholder = 'Amount';
-        amountInput.value = amount === null || amount === undefined ? '' : Number(amount).toFixed(2);
+        amountInput.value = amount === null || amount === undefined ? '' : String(Math.round(Number(amount)));
         c2.appendChild(amountInput);
 
         var c3 = document.createElement('div');
@@ -440,7 +440,7 @@
         if (rows.length !== 1) { return; }
         var input = rows[0].querySelector('.tender-amount');
         if (input && (input.value === '' || Number(input.value) === Number(state.total) || input.dataset.auto === '1')) {
-            input.value = Number(state.total).toFixed(2);
+            input.value = String(Math.round(Number(state.total)));
             input.dataset.auto = '1';
         }
     }
@@ -454,7 +454,7 @@
         var drop = event.target.closest('.tender-drop');
         if (!drop) { return; }
         if (tenderRows.querySelectorAll('.tender-row').length === 1) {
-            drop.closest('.tender-row').querySelector('.tender-amount').value = Number(state.total).toFixed(2);
+            drop.closest('.tender-row').querySelector('.tender-amount').value = String(Math.round(Number(state.total)));
         } else {
             drop.closest('.tender-row').remove();
         }
@@ -673,7 +673,7 @@
 
         post('checkout', {
             payment_method: rows.map(function (r) { return r.method; }),
-            payment_amount: rows.map(function (r) { return r.amount.toFixed(2); }),
+            payment_amount: rows.map(function (r) { return String(Math.round(r.amount)); }),
             payment_reference: rows.map(function (r) { return r.reference; }),
             idempotency_key: state.idempotency || randomKey()
         })

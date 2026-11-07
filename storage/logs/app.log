@@ -322,3 +322,6 @@
 [2026-11-07 09:05:21] WARNING: Permission denied {"user_id":143,"role":"staff","permission":"qr_payments.create","path":"/inventory/qr_payments?action=list"}
 [2026-11-07 09:05:57] WARNING: Permission denied {"user_id":145,"role":"staff","permission":"qr_payments.create","path":"/inventory/qr_payments?action=list"}
 [2026-11-07 09:09:19] WARNING: Permission denied {"user_id":147,"role":"staff","permission":"qr_payments.create","path":"/inventory/qr_payments?action=list"}
+[2026-11-07 16:32:42] ERROR: Call to undefined function getCompanyCurrency() {"file":"C:\\xampp\\htdocs\\inventory\\dashboard.php","line":40,"trace":"#0 {main}"}
+[2026-11-07 16:33:03] ERROR: Call to undefined function getCompanyCurrency() {"file":"C:\\xampp\\htdocs\\inventory\\dashboard.php","line":40,"trace":"#0 {main}"}
+[2026-11-07 16:33:49] ERROR: Call to undefined function getCompanyCurrency() {"file":"C:\\xampp\\htdocs\\inventory\\dashboard.php","line":40,"trace":"#0 {main}"}

@@ -105,8 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($postAction === 'save_expense') {
         $targetId = (int) ($_POST['expense_id'] ?? 0);
         $description = trim((string) ($_POST['description'] ?? ''));
-        $amount = (float) ($_POST['amount'] ?? 0);
-        $taxAmount = (float) ($_POST['tax_amount'] ?? 0);
+        $amount = moneyInput($_POST['amount'] ?? 0);
+        $taxAmount = moneyInput($_POST['tax_amount'] ?? 0);
 
         if ($description === '' || $amount < 0) {
             $_SESSION['auth_message'] = 'A description and a valid amount are required.';
@@ -231,5 +231,7 @@ if ($action === 'expenses') {
 } else {
     $pageTitle = 'Expense Categories';
 }
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/expense.html';

@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($postAction === 'record_payment') {
         $vendorId = (int) ($_POST['vendor_id'] ?? $_POST['supplier_id'] ?? 0);
-        $amount = (float) ($_POST['amount'] ?? 0);
+        $amount = moneyInput($_POST['amount'] ?? 0);
         $poId = (int) ($_POST['purchase_order_id'] ?? 0);
         $irId = (int) ($_POST['invoice_receipt_id'] ?? 0);
 
@@ -131,5 +131,7 @@ $totalOutstanding = array_sum(array_map(
     static fn(array $row): float => (float) ($row['outstanding_amount'] ?? 0),
     $outstanding
 ));
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/payment_made.html';

@@ -39,7 +39,7 @@ if (!function_exists('getDashboardSummary')) {
 
         $totalSales = dashboard_scalar(
             $pdo,
-            "SELECT COALESCE(SUM(total_amount), 0)
+            "SELECT COALESCE(SUM(base_total_amount), 0)
              FROM sales_invoices
              WHERE company_id = ? AND " . salesRevenueStatusSql()
              . " AND DATE_FORMAT(issue_date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')",
@@ -71,13 +71,8 @@ if (!function_exists('getDashboardSummary')) {
 
         $receivables = dashboard_scalar(
             $pdo,
-            "SELECT COALESCE(SUM(GREATEST(si.total_amount - COALESCE(pay.paid, 0), 0)), 0)
+            "SELECT COALESCE(SUM(si.base_amount_owed), 0)
              FROM sales_invoices si
-             LEFT JOIN (
-                 SELECT invoice_id, SUM(amount) AS paid
-                 FROM customer_payments
-                 GROUP BY invoice_id
-             ) pay ON pay.invoice_id = si.invoice_id
              WHERE si.company_id = ? AND si.status IN ('pending', 'partial')",
             [$companyId]
         );
@@ -140,7 +135,7 @@ if (!function_exists('getDashboardMonthlyTrend')) {
 
         try {
             $stmt = $pdo->prepare(
-                "SELECT DATE_FORMAT(issue_date, '%Y-%m') AS month_key, COALESCE(SUM(total_amount), 0) AS total
+                "SELECT DATE_FORMAT(issue_date, '%Y-%m') AS month_key, COALESCE(SUM(base_total_amount), 0) AS total
                  FROM sales_invoices
                  WHERE company_id = ? AND " . salesRevenueStatusSql() . " AND issue_date >= ?
                  GROUP BY month_key"
@@ -181,7 +176,7 @@ if (!function_exists('getDashboardInvoiceStatusBreakdown')) {
     {
         try {
             $stmt = $pdo->prepare(
-                "SELECT status, COUNT(*) AS invoice_count, COALESCE(SUM(total_amount), 0) AS total_amount
+                "SELECT status, COUNT(*) AS invoice_count, COALESCE(SUM(base_total_amount), 0) AS total_amount
                  FROM sales_invoices
                  WHERE company_id = ?
                  GROUP BY status
@@ -203,7 +198,7 @@ if (!function_exists('getRecentSalesInvoices')) {
         try {
             $stmt = $pdo->prepare(
                 "SELECT si.invoice_id, si.invoice_number, si.issue_date, si.due_date,
-                        si.total_amount, si.status, c.name AS customer_name
+                        si.total_amount, si.currency, si.status, c.name AS customer_name
                  FROM sales_invoices si
                  LEFT JOIN customers c ON c.customer_id = si.customer_id
                  WHERE si.company_id = ?

@@ -109,7 +109,7 @@ function createSupplier(PDO $pdo, array $supplierData): int
         $supplierData['country'] ?? null,
         $supplierData['payment_terms'] ?? 'Net 30',
         !empty($supplierData['is_tax_exempt']) ? 1 : 0,
-        $supplierData['default_currency'] ?? 'USD',
+        $supplierData['default_currency'] ?? 'NGN',
         $supplierData['notes'] ?? null,
         array_key_exists('is_active', $supplierData) ? (int) (bool) $supplierData['is_active'] : 1,
     ]);

@@ -20,7 +20,7 @@ require APP_ROOT . '/views/layout/header.php';
                             <h5 class="card-title"><i class="fas fa-building me-2"></i>Current Company</h5>
                             <p class="card-text"><?php echo e($companyData['name'] ?? ($company['name'] ?? 'N/A')); ?></p>
                             <p class="card-text small">
-                                Currency: <?php echo e($companyData['currency'] ?? $companyCurrency ?? 'USD'); ?>
+                                Currency: <?php echo e($companyData['currency'] ?? $companyCurrency ?? 'NGN'); ?>
                             </p>
                         </div>
                     </div>
@@ -94,7 +94,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><?php echo $i + 1; ?></td>
                                         <td><?php echo e($comp['name']); ?></td>
-                                        <td><?php echo e($comp['currency'] ?? 'USD'); ?></td>
+                                        <td><?php echo e($comp['currency'] ?? 'NGN'); ?></td>
                                         <td><?php echo (int) ($comp['fiscal_year_start'] ?? 1) === 1 ? 'January' : 'Month ' . (int) $comp['fiscal_year_start']; ?></td>
                                         <td><?php echo $comp['created_at'] ? e(date('M Y', strtotime($comp['created_at']))) : '—'; ?></td>
                                         <td>
@@ -103,12 +103,13 @@ require APP_ROOT . '/views/layout/header.php';
                                                data-bs-toggle="modal" data-bs-target="#companyModal"
                                                data-id="<?php echo (int) $comp['company_id']; ?>"
                                                data-name="<?php echo e($comp['name']); ?>"
-                                               data-currency="<?php echo e($comp['currency'] ?? 'USD'); ?>"
+                                               data-currency="<?php echo e($comp['currency'] ?? 'NGN'); ?>"
                                                data-fiscal="<?php echo (int) ($comp['fiscal_year_start'] ?? 1); ?>"
                                                data-tax="<?php echo e($comp['tax_id'] ?? ''); ?>"
                                                data-address="<?php echo e($comp['address'] ?? ''); ?>"
                                                data-phone="<?php echo e($comp['phone'] ?? ''); ?>"
-                                               data-email="<?php echo e($comp['email'] ?? ''); ?>">
+                                               data-email="<?php echo e($comp['email'] ?? ''); ?>"
+                                               data-website="<?php echo e($comp['website'] ?? ''); ?>">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                         </td>
@@ -268,9 +269,13 @@ require APP_ROOT . '/views/layout/header.php';
                             <div class="col-6">
                                 <label for="company_currency" class="form-label">Currency</label>
                                 <select class="form-select" id="company_currency" name="company_currency">
+                                    <option value="NGN">Nigerian Naira (₦)</option>
                                     <option value="USD">US Dollar ($)</option>
                                     <option value="EUR">Euro (€)</option>
                                     <option value="GBP">Pound Sterling (£)</option>
+                                    <option value="GHS">Ghanaian Cedi (GH₵)</option>
+                                    <option value="KES">Kenyan Shilling (KSh)</option>
+                                    <option value="ZAR">South African Rand (R)</option>
                                     <option value="CAD">Canadian Dollar (C$)</option>
                                     <option value="AUD">Australian Dollar (A$)</option>
                                 </select>
@@ -287,7 +292,7 @@ require APP_ROOT . '/views/layout/header.php';
                         </div>
                         <div class="row mb-3">
                             <div class="col-12">
-                                <label for="company_tax_id" class="form-label">Tax ID / VAT Number</label>
+                                <label for="company_tax_id" class="form-label">RC / Tax ID</label>
                                 <input type="text" class="form-control" id="company_tax_id" name="company_tax_id">
                             </div>
                         </div>
@@ -305,6 +310,12 @@ require APP_ROOT . '/views/layout/header.php';
                             <div class="col-6">
                                 <label for="company_email" class="form-label">Email</label>
                                 <input type="email" class="form-control" id="company_email" name="company_email">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <label for="company_website" class="form-label">Website</label>
+                                <input type="url" class="form-control" id="company_website" name="company_website">
                             </div>
                         </div>
                     </div>
@@ -469,12 +480,13 @@ require APP_ROOT . '/views/layout/header.php';
             function resetCompany() {
                 setValue('company_id', '');
                 setValue('company_name', '');
-                setValue('company_currency', 'USD');
+                setValue('company_currency', 'NGN');
                 setValue('fiscal_year', '1');
                 setValue('company_tax_id', '');
                 setValue('company_address', '');
                 setValue('company_phone', '');
                 setValue('company_email', '');
+                setValue('company_website', '');
                 document.getElementById('companyModalLabel').textContent = 'Add New Company';
             }
 
@@ -512,12 +524,13 @@ require APP_ROOT . '/views/layout/header.php';
                     const d = el.dataset;
                     setValue('company_id', d.id);
                     setValue('company_name', d.name);
-                    setValue('company_currency', d.currency || 'USD');
+                    setValue('company_currency', d.currency || 'NGN');
                     setValue('fiscal_year', d.fiscal || '1');
                     setValue('company_tax_id', d.tax);
                     setValue('company_address', d.address);
                     setValue('company_phone', d.phone);
                     setValue('company_email', d.email);
+                    setValue('company_website', d.website);
                     document.getElementById('companyModalLabel').textContent = 'Edit Company';
                 });
             });

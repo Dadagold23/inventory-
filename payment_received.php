@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($postAction === 'record_payment') {
         $customerId = (int) ($_POST['customer_id'] ?? 0);
         $invoiceId = (int) ($_POST['invoice_id'] ?? 0);
-        $amount = (float) ($_POST['amount'] ?? 0);
+        $amount = moneyInput($_POST['amount'] ?? 0);
 
         if ($customerId <= 0 || $invoiceId <= 0 || $amount <= 0) {
             $_SESSION['auth_message'] = 'Select a customer and invoice, then enter a positive amount.';
@@ -43,10 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $invoiceStmt = $pdo->prepare(
-            "SELECT si.invoice_id, si.company_id, si.customer_id, si.total_amount, si.status,
+            "SELECT si.invoice_id, si.company_id, si.customer_id, si.total_amount, si.currency, si.status,
+                    c.currency AS customer_currency, c.country AS customer_country,
                     COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp
                                WHERE cp.invoice_id = si.invoice_id), 0) AS paid
              FROM sales_invoices si
+             LEFT JOIN customers c ON c.customer_id = si.customer_id
              WHERE si.invoice_id = ?"
         );
         $invoiceStmt->execute([$invoiceId]);
@@ -62,7 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $remaining = (float) $invoice['total_amount'] - (float) $invoice['paid'];
         if ($amount > $remaining + 0.0001) {
-            $_SESSION['auth_message'] = 'The amount exceeds the invoice balance of ' . formatPrice($remaining) . '.';
+            $invoiceCurrency = (string) ($invoice['currency'] ?? '') ?: customerCurrencyCode(
+                    ['currency' => $invoice['customer_currency'] ?? null, 'country' => $invoice['customer_country'] ?? null],
+                    getCompanyCurrency($pdo)
+                );
+            $_SESSION['auth_message'] = 'The amount exceeds the invoice balance of ' . formatPrice($remaining, null, $invoiceCurrency) . '.';
             redirect('/payment_received?action=list');
         }
 
@@ -108,7 +114,7 @@ $customerStmt->execute([$companyId]);
 $customers = $customerStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $invoiceStmt = $pdo->prepare(
-    "SELECT si.invoice_id, si.invoice_number, si.customer_id, si.total_amount,
+    "SELECT si.invoice_id, si.invoice_number, si.customer_id, si.total_amount, si.currency,
             c.name AS customer_name,
             COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp
                        WHERE cp.invoice_id = si.invoice_id), 0) AS paid
@@ -122,12 +128,14 @@ $invoiceStmt->execute([$companyId]);
 $invoices = $invoiceStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $totalReceived = array_sum(array_map(
-    static fn(array $row): float => (float) ($row['amount'] ?? 0),
+    static fn(array $row): float => (float) ($row['base_amount'] ?? 0),
     $payments
 ));
 $totalOutstanding = array_sum(array_map(
     static fn(array $row): float => (float) ($row['outstanding_amount'] ?? 0),
     $outstanding
 ));
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/payment_received.html';

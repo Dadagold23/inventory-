@@ -26,7 +26,20 @@ $receiptLines = $receipt['lines'];
 $receiptStatus = (string) $receipt['status'];
 $receiptStatusLabel = receiptStatusLabel($receiptStatus);
 $receiptIssued = date('M d, Y g:i A', strtotime($receipt['issued_at']));
-$receiptMoney = static fn ($value): string => number_format((float) $value, 2);
+// NGN (₦) uses 2 decimal places like all other currencies, but shows ₦ prefix.
+// Foreign currencies show their symbol/code prefix. The closure is used for every
+// monetary amount on the slip — quantities use $receiptQty instead.
+$receiptMoney = static function ($value) use ($receiptCurrency): string {
+    $formatted = number_format((float) $value, 2);
+    $upper = strtoupper(trim($receiptCurrency));
+    if ($upper === 'NGN') {
+        return '₦' . $formatted;
+    }
+    // Use currencySymbol() if available (it is — helpers.php is always loaded).
+    $sym = function_exists('currencySymbol') ? currencySymbol($upper) : $upper;
+    return ($sym === $upper) ? ($sym . ' ' . $formatted) : ($sym . $formatted);
+};
+$receiptQty = static fn ($value): string => rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -316,7 +329,7 @@ $receiptMoney = static fn ($value): string => number_format((float) $value, 2);
             <?php if ($receiptPhone !== ''): ?><span>Tel: <?php echo e($receiptPhone); ?></span><?php endif; ?>
             <?php if ($receiptEmail !== ''): ?><span><?php echo e($receiptEmail); ?></span><?php endif; ?>
             <?php if ($receiptTaxId !== ''): ?><span>Tax ID: <?php echo e($receiptTaxId); ?></span><?php endif; ?>
-            <?php if ($receiptCurrency !== ''): ?><span>Currency: <?php echo e($receiptCurrency); ?></span><?php endif; ?>
+            <?php if ($receiptCurrency !== ''): ?><span>Currency: <?php echo e(function_exists('currencyLabel') ? currencyLabel($receiptCurrency) : $receiptCurrency); ?></span><?php endif; ?>
         </div>
 
         <div class="receipt-title">

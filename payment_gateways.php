@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo,
             $companyId,
             $transactionId,
-            round((float) ($_POST['amount'] ?? 0), 2),
+            moneyInput($_POST['amount'] ?? 0),
             mb_substr(trim((string) ($_POST['reason'] ?? '')), 0, 255),
             $userId
         );

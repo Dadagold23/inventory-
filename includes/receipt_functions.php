@@ -276,6 +276,24 @@ if (!function_exists('receiptPayload')) {
 
         $logoFile = receiptLogoFile($settings);
 
+        // The invoice's stored currency is authoritative: it was fixed when the
+        // sale was made. Only fall back to the customer/country rule for old
+        // rows created before currency was stored on the invoice.
+        $companyCurrencyCode = strtoupper(trim((string) ($company['currency'] ?? getCompanyCurrency($pdo))));
+        $saleCurrencyCode = strtoupper(trim((string) ($sale['currency'] ?? '')));
+        if ($saleCurrencyCode === '') {
+            $saleCurrencyCode = function_exists('customerCurrencyCode')
+                ? customerCurrencyCode(
+                    ['currency' => $sale['customer_currency'] ?? null, 'country' => $sale['customer_country'] ?? null],
+                    $companyCurrencyCode
+                  )
+                : $companyCurrencyCode;
+        }
+        $exchangeRate = (float) ($sale['exchange_rate'] ?? 1);
+        if ($exchangeRate <= 0) {
+            $exchangeRate = 1.0;
+        }
+
         return [
             'company' => [
                 'name' => trim((string) ($company['name'] ?? APP_NAME)),
@@ -283,7 +301,9 @@ if (!function_exists('receiptPayload')) {
                 'phone' => trim((string) ($company['phone'] ?? '')),
                 'email' => trim((string) ($company['email'] ?? '')),
                 'tax_id' => trim((string) ($company['tax_id'] ?? '')),
-                'currency' => strtoupper(trim((string) ($company['currency'] ?? getCompanyCurrency($pdo)))),
+                'currency' => $saleCurrencyCode,
+                'base_currency' => $companyCurrencyCode,
+                'exchange_rate' => $exchangeRate,
             ],
             'branch' => trim((string) ($branch['name'] ?? '')),
             'cashier' => $cashier,
@@ -480,7 +500,7 @@ if (!function_exists('receiptTextLines')) {
         if ($company['address'] !== '') {
             $para($company['address'], 'center');
         }
-        foreach (['Tel: ' => $company['phone'], '' => $company['email'], 'Tax ID: ' => $company['tax_id'], 'Currency: ' => $company['currency']] as $prefix => $value) {
+        foreach (['Tel: ' => $company['phone'], '' => $company['email'], 'RC / Tax ID: ' => $company['tax_id'], 'Currency: ' => $company['currency']] as $prefix => $value) {
             if (trim((string) $value) !== '') {
                 $para($prefix . trim((string) $value), 'center');
             }

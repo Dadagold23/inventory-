@@ -67,6 +67,11 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                         'draft' => 'secondary', 'cancelled' => 'danger',
                                     ];
                                     foreach ($sales as $i => $row):
+                                        $rowCurrency = strtoupper(trim((string) ($row['currency'] ?? '')))
+                                            ?: customerCurrencyCode(
+                                                ['currency' => $row['customer_currency'] ?? null, 'country' => $row['customer_country'] ?? null],
+                                                $companyCurrency
+                                            );
                                     ?>
                                     <tr>
                                         <td><?php echo $i + 1; ?></td>
@@ -74,9 +79,9 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                         <td><?php echo e($row['customer_name'] ?? 'Walk-in'); ?></td>
                                         <td><?php echo e(date('M d, Y', strtotime($row['issue_date']))); ?></td>
                                         <td><span class="badge bg-<?php echo e($statusClasses[$row['status']] ?? 'secondary'); ?>"><?php echo e($row['status']); ?></span></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['amount_paid']); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['amount_owed']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount'], null, $rowCurrency); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount_paid'], null, $rowCurrency); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['amount_owed'], null, $rowCurrency); ?></td>
                                         <td class="text-nowrap">
                                             <a class="btn btn-sm btn-outline-primary" title="Print Receipt" target="_blank" rel="noopener"
                                                 href="<?php echo e(url('/sales?action=receipt&sale_id=' . (int) $row['invoice_id'])); ?>">
@@ -91,6 +96,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                                 data-id="<?php echo (int) $row['invoice_id']; ?>"
                                                 data-customer="<?php echo (int) $row['customer_id']; ?>"
                                                 data-invoice="<?php echo e($row['invoice_number']); ?>"
+                                                data-currency="<?php echo e($rowCurrency); ?>"
                                                 data-amount="<?php echo e(number_format((float) $row['amount_owed'], 2, '.', '')); ?>">
                                                 <i class="fas fa-money-bill"></i>
                                             </button>
@@ -113,6 +119,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                     </div>
 
                     <?php if (!empty($sale)): ?>
+                    <?php $saleCurrency = strtoupper(trim((string) ($sale['currency'] ?? ''))) ?: customerCurrencyCode(['currency' => $sale['customer_currency'] ?? null, 'country' => $sale['customer_country'] ?? null], $companyCurrency); ?>
                     <div class="card mt-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="card-title mb-0">Invoice <?php echo e($sale['invoice_number']); ?></h5>
@@ -135,14 +142,14 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                         <tr>
                                             <td><?php echo e($item['description']); ?></td>
                                             <td class="text-end"><?php echo number_format((float) $item['quantity'], 2); ?></td>
-                                            <td class="text-end"><?php echo formatPrice((float) $item['unit_price']); ?></td>
-                                            <td class="text-end"><?php echo formatPrice((float) $item['line_total']); ?></td>
+                                            <td class="text-end"><?php echo formatPrice((float) $item['unit_price'], null, $saleCurrency); ?></td>
+                                            <td class="text-end"><?php echo formatPrice((float) $item['line_total'], null, $saleCurrency); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>
-                            <p class="mb-0 text-end"><strong>Total:</strong> <?php echo formatPrice((float) $sale['total_amount']); ?> &nbsp; <strong>Balance:</strong> <?php echo formatPrice((float) $sale['amount_owed']); ?></p>
+                            <p class="mb-0 text-end"><strong>Total:</strong> <?php echo formatPrice((float) $sale['total_amount'], null, $saleCurrency); ?> &nbsp; <strong>Balance:</strong> <?php echo formatPrice((float) $sale['amount_owed'], null, $saleCurrency); ?></p>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -177,13 +184,18 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                         'rejected' => 'danger', 'expired' => 'secondary', 'converted' => 'primary',
                                     ];
                                     foreach ($quotes as $i => $row):
+                                        $rowQuoteCurrency = strtoupper(trim((string) ($row['currency'] ?? '')))
+                                            ?: customerCurrencyCode(
+                                                ['currency' => $row['customer_currency'] ?? null, 'country' => $row['customer_country'] ?? null],
+                                                $companyCurrency
+                                            );
                                     ?>
                                     <tr>
                                         <td><?php echo $i + 1; ?></td>
                                         <td><?php echo e($row['quote_number']); ?></td>
                                         <td><?php echo e($row['customer_name'] ?? 'N/A'); ?></td>
                                         <td><span class="badge bg-<?php echo e($quoteClasses[$row['status']] ?? 'secondary'); ?>"><?php echo e($row['status']); ?></span></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount'], null, $rowQuoteCurrency); ?></td>
                                         <td><?php echo $row['expiry_date'] ? e(date('M d, Y', strtotime($row['expiry_date']))) : 'N/A'; ?></td>
                                         <td class="text-nowrap">
                                             <?php if (!in_array($row['status'], ['converted', 'rejected', 'expired'], true)): ?>
@@ -239,19 +251,24 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($customers as $i => $row): ?>
+                                    <?php foreach ($customers as $i => $row):
+                                        $custCurrency = customerCurrencyCode($row, $companyCurrency);
+                                    ?>
                                     <tr>
                                         <td><?php echo $i + 1; ?></td>
-                                        <td><?php echo e($row['name']); ?></td>
+                                        <td><?php echo e($row['name']); ?>
+                                            <?php if (!empty($row['country'])): ?><br><span class="small text-muted"><?php echo e($row['country']); ?></span><?php endif; ?>
+                                        </td>
                                         <td><?php echo e($row['email'] ?? ''); ?></td>
                                         <td><?php echo e($row['phone'] ?? ''); ?></td>
                                         <td><?php echo e($row['payment_terms'] ?? ''); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) ($row['credit_limit'] ?? 0)); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) ($row['outstanding'] ?? 0)); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) ($row['credit_limit'] ?? 0), null, $custCurrency); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) ($row['outstanding'] ?? 0), null, $companyCurrency); ?></td>
                                         <td>
                                             <span class="badge bg-<?php echo !empty($row['is_active']) ? 'success' : 'danger'; ?>">
                                                 <?php echo !empty($row['is_active']) ? 'Active' : 'Inactive'; ?>
                                             </span>
+                                            <span class="badge bg-secondary ms-1"><?php echo e(currencySymbol($custCurrency)); ?></span>
                                         </td>
                                         <td class="text-nowrap">
                                             <button type="button" class="btn btn-sm btn-outline-secondary js-edit-customer" title="Edit"
@@ -266,6 +283,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                                 data-state="<?php echo e($row['state'] ?? ''); ?>"
                                                 data-postal="<?php echo e($row['postal_code'] ?? ''); ?>"
                                                 data-country="<?php echo e($row['country'] ?? ''); ?>"
+                                                data-currency="<?php echo e($row['currency'] ?? ''); ?>"
                                                 data-credit="<?php echo e(number_format((float) ($row['credit_limit'] ?? 0), 2, '.', '')); ?>"
                                                 data-terms="<?php echo e($row['payment_terms'] ?? 'Net 30'); ?>"
                                                 data-active="<?php echo (int) $row['is_active']; ?>"
@@ -313,7 +331,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                             <span class="badge bg-success"><i class="fas fa-unlock me-1"></i>Shift #<?php echo (int) $posShift['shift_id']; ?> open</span>
                             <span class="small text-muted">since <?php echo e(date('H:i', strtotime((string) $posShift['opened_at']))); ?></span>
                             <span class="ms-auto small">Sales on shift <strong id="posShiftSales"><?php echo (int) $posShift['sales_count']; ?></strong></span>
-                            <span class="small">Expected in drawer <strong id="posShiftExpected"><?php echo e(formatPrice((float) $posShift['expected_cash'])); ?></strong></span>
+                            <span class="small">Expected in drawer <strong id="posShiftExpected"><?php echo e(formatPrice((float) $posShift['expected_cash'], null, $companyCurrency)); ?></strong></span>
                             <a class="btn btn-sm btn-outline-secondary" href="<?php echo e(url('/shifts?action=detail&shift_id=' . (int) $posShift['shift_id'])); ?>">
                                 <i class="fas fa-wallet me-1"></i>Movements
                             </a>
@@ -335,7 +353,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                          data-csrf="<?php echo e(csrf_token()); ?>"
                          data-idempotency="<?php echo e($posIdempotencyKey); ?>"
                          data-cash-codes="<?php echo e(json_encode(array_values($posCashCodes))); ?>"
-                         data-total="<?php echo e(number_format($posTotal, 2, '.', '')); ?>"
+                         data-total="<?php echo e(number_format($posTotal, 0, '.', '')); ?>"
                          data-count="<?php echo e((string) count($posCart)); ?>"
                          data-shift-allowed="<?php echo empty($posShift['allowed']) ? '0' : '1'; ?>">
                         <div class="col-lg-7">
@@ -372,7 +390,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                                     <tr>
                                                         <td><?php echo e($product['name']); ?></td>
                                                         <td><?php echo e($product['sku'] ?? ''); ?></td>
-                                                        <td class="text-end"><?php echo e(formatPrice((float) ($product['sales_price'] ?? 0))); ?></td>
+                                                        <td class="text-end"><?php echo e(formatPrice((float) ($product['sales_price'] ?? 0), null, $companyCurrency)); ?></td>
                                                         <td class="text-end"><?php echo $stockQty <= 0 ? '<span class="badge bg-danger">Out</span>' : e(number_format($stockQty, 2)); ?></td>
                                                         <td class="text-end"><input type="number" class="form-control form-control-sm pos-browse-qty" value="1" min="0.01" step="0.01" data-product="<?php echo (int) $product['product_id']; ?>"></td>
                                                         <td><button type="button" class="btn btn-sm btn-primary pos-browse-add" data-product="<?php echo (int) $product['product_id']; ?>">Add</button></td>
@@ -439,7 +457,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                             <button type="button" class="btn btn-sm btn-outline-secondary" id="posExact">Exact cash</button>
                                         </div>
                                         <div class="d-flex justify-content-between fw-semibold" id="posChangeRow">
-                                            <span>Change due</span><span id="posChange">0.00</span>
+                                            <span>Change due</span><span id="posChange">0</span>
                                         </div>
                                         <p class="small text-muted mb-2">Split a bill across methods with <em>Add payment</em>. Change is confirmed by the server, not the browser.</p>
                                         <div id="posOnline" class="alert alert-info py-2 mb-2 d-none">
@@ -484,7 +502,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                             </div>
                                             <div class="mb-2">
                                                 <label class="form-label">Cash tendered (for change)</label>
-                                                <input type="number" step="0.01" min="0" class="form-control" name="payment_amount">
+                                                <input type="number" step="1" min="0" class="form-control" name="payment_amount">
                                             </div>
                                             <div class="mb-2">
                                                 <label class="form-label">Reference</label>
@@ -531,14 +549,14 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                 <select name="line_product_id[]" class="form-select form-select-sm line-product" required>
                     <option value="">-- Select Product --</option>
                     <?php foreach ($products as $product): ?>
-                    <option value="<?php echo (int) $product['product_id']; ?>" data-price="<?php echo e(number_format((float) ($product['sales_price'] ?? 0), 4, '.', '')); ?>">
+                    <option value="<?php echo (int) $product['product_id']; ?>">
                         <?php echo e($product['name']); ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
             </td>
             <td><input type="number" name="line_quantity[]" class="form-control form-control-sm" value="1" min="0.01" step="0.01"></td>
-            <td><input type="number" name="line_unit_price[]" class="form-control form-control-sm line-price" step="0.01" min="0" placeholder="Auto"></td>
+            <td><input type="number" name="line_unit_price[]" class="form-control form-control-sm line-price" step="1" min="0" placeholder="Auto"></td>
             <td><input type="number" name="line_discount[]" class="form-control form-control-sm" value="0" min="0" max="100" step="0.01"></td>
             <td><button type="button" class="btn btn-sm btn-outline-danger line-remove"><i class="fas fa-times"></i></button></td>
         </tr>
@@ -559,12 +577,13 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                         <div class="row mb-3">
                             <div class="col-md-4">
                                 <label class="form-label">Customer <span class="text-danger">*</span></label>
-                                <select name="customer_id" class="form-select" required>
+                                <select name="customer_id" id="sale_customer_id" class="form-select" required>
                                     <option value="">-- Select Customer --</option>
                                     <?php foreach ($customers as $option): ?>
-                                    <option value="<?php echo (int) $option['customer_id']; ?>"><?php echo e($option['name']); ?></option>
+                                    <option value="<?php echo (int) $option['customer_id']; ?>" data-currency="<?php echo e(customerCurrencyCode($option, $companyCurrency)); ?>"><?php echo e($option['name']); ?></option>
                                     <?php endforeach; ?>
                                 </select>
+                                <div class="form-text">Sale currency: <span id="saleCurrencyCode"><?php echo e($companyCurrency); ?></span></div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Branch</label>
@@ -585,10 +604,11 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                         </div>
                         <div class="table-responsive">
                             <table class="table table-sm align-middle">
-                                <thead><tr><th style="min-width:220px">Product</th><th>Qty</th><th>Unit Price</th><th>Disc %</th><th></th></tr></thead>
+                                <thead><tr><th style="min-width:220px">Product</th><th>Qty</th><th>Unit Price (sale currency)</th><th>Disc %</th><th></th></tr></thead>
                                 <tbody id="saleLines"></tbody>
                             </table>
                         </div>
+                        <p class="form-text">Leave unit price blank to use the catalogue price converted from NGN at the current exchange rate.</p>
                         <button type="button" class="btn btn-sm btn-outline-primary js-add-line" data-target="saleLines"><i class="fas fa-plus me-1"></i> Add Line</button>
                         <div class="row mt-3">
                             <div class="col-md-3">
@@ -600,8 +620,8 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                                 <input type="number" name="tax_rate" class="form-control" value="<?php echo e((string) $defaultTaxRate); ?>" min="0" step="0.0001">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label">Amount Paid</label>
-                                <input type="number" name="amount_paid" class="form-control" value="0" min="0" step="0.01">
+                                <label class="form-label">Amount Paid (<span id="salePaymentCurrency"><?php echo e($companyCurrency); ?></span>)</label>
+                                <input type="number" name="amount_paid" class="form-control" value="0" min="0" step="1">
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Payment Method</label>
@@ -647,12 +667,13 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                         <div class="row mb-3">
                             <div class="col-md-4">
                                 <label class="form-label">Customer <span class="text-danger">*</span></label>
-                                <select name="customer_id" class="form-select" required>
+                                <select name="customer_id" id="quote_customer_id" class="form-select" required>
                                     <option value="">-- Select Customer --</option>
                                     <?php foreach ($customers as $option): ?>
-                                    <option value="<?php echo (int) $option['customer_id']; ?>"><?php echo e($option['name']); ?></option>
+                                    <option value="<?php echo (int) $option['customer_id']; ?>" data-currency="<?php echo e(customerCurrencyCode($option, $companyCurrency)); ?>"><?php echo e($option['name']); ?></option>
                                     <?php endforeach; ?>
                                 </select>
+                                <div class="form-text">Quote currency: <span id="quoteCurrencyCode"><?php echo e($companyCurrency); ?></span></div>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Branch</label>
@@ -691,10 +712,11 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                         </div>
                         <div class="table-responsive">
                             <table class="table table-sm align-middle">
-                                <thead><tr><th style="min-width:220px">Product</th><th>Qty</th><th>Unit Price</th><th>Disc %</th><th></th></tr></thead>
+                                <thead><tr><th style="min-width:220px">Product</th><th>Qty</th><th>Unit Price (quote currency)</th><th>Disc %</th><th></th></tr></thead>
                                 <tbody id="quoteLines"></tbody>
                             </table>
                         </div>
+                        <p class="form-text">Leave unit price blank to use the catalogue price converted from NGN at the current exchange rate.</p>
                         <button type="button" class="btn btn-sm btn-outline-primary js-add-line" data-target="quoteLines"><i class="fas fa-plus me-1"></i> Add Line</button>
                         <div class="mt-3">
                             <label class="form-label">Notes</label>
@@ -758,7 +780,20 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                         <div class="row mb-3">
                             <div class="col-md-3">
                                 <label class="form-label">Country</label>
-                                <input type="text" class="form-control" id="customer_country" name="customer_country">
+                                <input type="text" class="form-control" id="customer_country" name="customer_country"
+                                       placeholder="e.g. Nigeria">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Currency
+                                    <span class="text-muted small ms-1" title="Nigerian customers default to Naira (NGN); customers in other countries default to US dollars (USD).">
+                                        <i class="fas fa-info-circle"></i>
+                                    </span>
+                                </label>
+                                <select class="form-select" id="customer_currency" name="customer_currency">
+                                    <option value="">Auto from country</option>
+                                    <option value="NGN">₦ Nigerian Naira (NGN)</option>
+                                    <option value="USD">$ US Dollar (USD)</option>
+                                </select>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Tax ID</label>
@@ -766,8 +801,10 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Credit Limit</label>
-                                <input type="number" class="form-control" id="customer_credit_limit" name="customer_credit_limit" value="0" min="0" step="0.01">
+                                <input type="number" class="form-control" id="customer_credit_limit" name="customer_credit_limit" value="0" min="0" step="1">
                             </div>
+                        </div>
+                        <div class="row mb-3">
                             <div class="col-md-3">
                                 <label class="form-label">Payment Terms</label>
                                 <select class="form-select" id="customer_payment_terms" name="customer_payment_terms">
@@ -814,10 +851,10 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <p class="text-muted">Invoice: <strong id="payment_invoice_label"></strong></p>
+                        <p class="text-muted">Invoice: <strong id="payment_invoice_label"></strong> (<span id="payment_currency_label"><?php echo e($companyCurrency); ?></span>)</p>
                         <div class="mb-3">
                             <label class="form-label">Amount</label>
-                            <input type="number" name="payment_amount" id="payment_amount" class="form-control" min="0.01" step="0.01" required>
+                            <input type="number" name="payment_amount" id="payment_amount" class="form-control" min="1" step="1" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Method</label>
@@ -868,14 +905,20 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                 });
             });
 
-            document.addEventListener('change', function (event) {
-                if (event.target.classList.contains('line-product')) {
-                    const option = event.target.options[event.target.selectedIndex];
-                    const priceInput = event.target.closest('tr').querySelector('.line-price');
-                    if (priceInput && option && option.dataset.price) {
-                        priceInput.value = parseFloat(option.dataset.price).toFixed(2);
-                    }
-                }
+            [
+                ['sale_customer_id', ['saleCurrencyCode', 'salePaymentCurrency']],
+                ['quote_customer_id', ['quoteCurrencyCode']]
+            ].forEach(function (mapping) {
+                const customerSelect = document.getElementById(mapping[0]);
+                if (!customerSelect) { return; }
+                customerSelect.addEventListener('change', function () {
+                    const option = customerSelect.options[customerSelect.selectedIndex];
+                    const currency = option && option.dataset.currency ? option.dataset.currency : '—';
+                    mapping[1].forEach(function (id) {
+                        const label = document.getElementById(id);
+                        if (label) { label.textContent = currency; }
+                    });
+                });
             });
 
             document.addEventListener('click', function (event) {
@@ -911,6 +954,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                     setValue('customer_state', d.state);
                     setValue('customer_postal', d.postal);
                     setValue('customer_country', d.country);
+                    setValue('customer_currency', d.currency || '');
                     setValue('customer_credit_limit', d.credit);
                     setValue('customer_payment_terms', d.terms);
                     setValue('customer_notes', d.notes);
@@ -932,6 +976,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                     setValue('customer_state', '');
                     setValue('customer_postal', '');
                     setValue('customer_country', '');
+                    setValue('customer_currency', '');
                     setValue('customer_credit_limit', '0');
                     setValue('customer_payment_terms', 'Net 30');
                     setValue('customer_notes', '');
@@ -948,6 +993,7 @@ $paymentOptionsBankFirst = isset($paymentMethodOptions['bank_transfer'])
                     setValue('payment_customer_id', d.customer);
                     setValue('payment_amount', d.amount);
                     document.getElementById('payment_invoice_label').textContent = d.invoice || '';
+                    document.getElementById('payment_currency_label').textContent = d.currency || '';
                 });
             });
         })();

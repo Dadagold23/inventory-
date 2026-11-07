@@ -64,15 +64,21 @@ if ($action === 'list' || $action === 'manage') {
         if ($_POST['action'] === 'save_company') {
             $editId = (int) ($_POST['company_id'] ?? 0);
             $companyName = trim((string) ($_POST['company_name'] ?? ''));
-            $companyCurrency = strtoupper(substr(trim((string) ($_POST['company_currency'] ?? 'USD')), 0, 3));
+            $companyCurrency = strtoupper(substr(trim((string) ($_POST['company_currency'] ?? 'NGN')), 0, 3));
             $fiscalYear = max(1, min(12, (int) ($_POST['fiscal_year'] ?? 1)));
             $taxId = trim((string) ($_POST['company_tax_id'] ?? ''));
             $address = trim((string) ($_POST['company_address'] ?? ''));
             $phone = trim((string) ($_POST['company_phone'] ?? ''));
             $email = trim((string) ($_POST['company_email'] ?? ''));
+            $website = trim((string) ($_POST['company_website'] ?? ''));
 
             if ($companyName === '') {
                 $_SESSION['auth_message'] = 'Company name is required.';
+                redirect('/company');
+            }
+
+            if ($website !== '' && filter_var($website, FILTER_VALIDATE_URL) === false) {
+                $_SESSION['auth_message'] = 'Enter a valid company website URL.';
                 redirect('/company');
             }
 
@@ -84,17 +90,20 @@ if ($action === 'list' || $action === 'manage') {
                         tax_id = ?, address = ?, phone = ?, email = ?, updated_at = NOW()
                     WHERE company_id = ?
                 ")->execute([$companyName, $companyCurrency, $fiscalYear, $taxId, $address, $phone, $email, $companyId]);
+                updateCompanySettings($pdo, $companyId, ['company_website' => $website]);
             } else {
                 $pdo->prepare("
                     INSERT INTO companies (name, currency, fiscal_year_start, tax_id, address, phone, email, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 ")->execute([$companyName, $companyCurrency, $fiscalYear, $taxId, $address, $phone, $email]);
 
-                updateCompanySettings($pdo, (int) $pdo->lastInsertId(), [
+                $newCompanyId = (int) $pdo->lastInsertId();
+                updateCompanySettings($pdo, $newCompanyId, [
                     'timezone' => 'UTC',
                     'date_format' => 'm/d/Y',
                     'decimal_places' => '2',
                     'weighted_average_costing' => '1',
+                    'company_website' => $website,
                 ]);
             }
 
@@ -229,6 +238,7 @@ $managersStmt->execute([$companyId]);
 $managers = $managersStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $companyData = getCurrentCompany($pdo);
+$companyData['website'] = getCompanySetting($pdo, 'company_website', '', $companyId);
 $companyCurrency = getCompanyCurrency($pdo);
 
 $viewFile = 'views/company.html';

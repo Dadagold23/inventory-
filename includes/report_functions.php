@@ -277,7 +277,7 @@ function reportCashFlow(PDO $pdo, int $companyId, string $start, string $end): a
 
     $stmt = $pdo->prepare("
         SELECT CONCAT('Customer payments (', REPLACE(payment_method, '_', ' '), ')') AS label,
-               COALESCE(SUM(amount), 0) AS amount
+               COALESCE(SUM(base_amount), 0) AS amount
         FROM customer_payments
         WHERE company_id = ? AND payment_date BETWEEN ? AND ?
         GROUP BY payment_method
@@ -425,16 +425,17 @@ function reportSalesAnalytics(PDO $pdo, int $companyId, string $start, string $e
         $scopeParams[] = $branchId;
     }
 
-    $lineNet = 'sil.line_total * COALESCE(1 - si.discount_amount / NULLIF(si.subtotal, 0), 1)';
+    $baseRate = 'COALESCE(NULLIF(si.exchange_rate, 0), 1)';
+    $lineNet = 'sil.line_total * ' . $baseRate . ' * COALESCE(1 - si.discount_amount / NULLIF(si.subtotal, 0), 1)';
     $lineTax = '(' . $lineNet . ') * COALESCE(si.tax_amount / NULLIF(si.subtotal - si.discount_amount, 0), 0)';
 
     // Bill-level totals: what was invoiced, the header discount and the tax.
     $stmt = $pdo->prepare("
         SELECT COUNT(*) AS transactions,
-               COALESCE(SUM(si.subtotal), 0) AS subtotal,
-               COALESCE(SUM(si.discount_amount), 0) AS header_discounts,
-               COALESCE(SUM(si.tax_amount), 0) AS tax,
-               COALESCE(SUM(si.total_amount), 0) AS invoiced
+               COALESCE(SUM(si.base_subtotal), 0) AS subtotal,
+               COALESCE(SUM(si.base_discount_amount), 0) AS header_discounts,
+               COALESCE(SUM(si.base_tax_amount), 0) AS tax,
+               COALESCE(SUM(si.base_total_amount), 0) AS invoiced
         FROM sales_invoices si
         WHERE $scope
     ");
@@ -445,8 +446,8 @@ function reportSalesAnalytics(PDO $pdo, int $companyId, string $start, string $e
     // header discount. Net here reconciles with subtotal - header discount.
     $stmt = $pdo->prepare("
         SELECT COALESCE(SUM(sil.quantity), 0) AS units,
-               COALESCE(SUM(sil.quantity * sil.unit_price), 0) AS gross,
-               COALESCE(SUM(sil.discount_amount), 0) AS line_discounts,
+               COALESCE(SUM(sil.quantity * sil.unit_price * {$baseRate}), 0) AS gross,
+               COALESCE(SUM(sil.discount_amount * {$baseRate}), 0) AS line_discounts,
                COALESCE(SUM(sil.quantity * sil.unit_cost), 0) AS cogs,
                COALESCE(SUM($lineNet), 0) AS net
         FROM sales_invoice_items sil
@@ -515,9 +516,9 @@ function reportSalesAnalytics(PDO $pdo, int $companyId, string $start, string $e
     $stmt = $pdo->prepare("
         SELECT {$dimension['label']} AS label,
                COALESCE(SUM(sil.quantity), 0) AS units,
-               COALESCE(SUM(sil.quantity * sil.unit_price), 0) AS gross,
-               COALESCE(SUM(sil.discount_amount), 0) AS line_discounts,
-               COALESCE(SUM(sil.line_total) - SUM($lineNet), 0) AS header_discounts,
+               COALESCE(SUM(sil.quantity * sil.unit_price * {$baseRate}), 0) AS gross,
+               COALESCE(SUM(sil.discount_amount * {$baseRate}), 0) AS line_discounts,
+               COALESCE(SUM(sil.line_total * {$baseRate}) - SUM($lineNet), 0) AS header_discounts,
                COALESCE(SUM($lineNet), 0) AS net,
                COALESCE(SUM($lineTax), 0) AS tax,
                COALESCE(SUM(sil.quantity * sil.unit_cost), 0) AS cogs,
@@ -567,7 +568,7 @@ function reportSalesAnalytics(PDO $pdo, int $companyId, string $start, string $e
     $stmt = $pdo->prepare("
         SELECT COALESCE(m.name, CONCAT('Payment method (', REPLACE(p.payment_method, '_', ' '), ')')) AS label,
                COALESCE(m.is_cash, CASE WHEN p.payment_method = 'cash' THEN 1 ELSE 0 END) AS is_cash,
-               COALESCE(SUM(p.amount), 0) AS amount,
+               COALESCE(SUM(p.base_amount), 0) AS amount,
                COUNT(*) AS payment_count
         FROM customer_payments p
         INNER JOIN sales_invoices si ON si.invoice_id = p.invoice_id
@@ -599,12 +600,12 @@ function reportSalesAnalytics(PDO $pdo, int $companyId, string $start, string $e
     // Outstanding is this period's bills minus every payment ever applied to
     // them, floored per invoice so an overpayment cannot hide another debt.
     $stmt = $pdo->prepare("
-        SELECT COALESCE(SUM(GREATEST(si.total_amount - COALESCE(pay.paid, 0), 0)), 0) AS outstanding,
-               COALESCE(SUM(CASE WHEN si.total_amount - COALESCE(pay.paid, 0) > 0.005 THEN 1 ELSE 0 END), 0) AS unpaid_invoices,
+        SELECT COALESCE(SUM(si.base_amount_owed), 0) AS outstanding,
+               COALESCE(SUM(CASE WHEN si.base_amount_owed > 0.005 THEN 1 ELSE 0 END), 0) AS unpaid_invoices,
                COALESCE(SUM(COALESCE(pay.paid, 0)), 0) AS paid_on_period_invoices
         FROM sales_invoices si
         LEFT JOIN (
-            SELECT invoice_id, SUM(amount) AS paid
+            SELECT invoice_id, SUM(base_amount) AS paid
             FROM customer_payments
             WHERE company_id = ?
             GROUP BY invoice_id

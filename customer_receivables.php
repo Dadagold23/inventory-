@@ -179,4 +179,9 @@ if ($action === 'statements') {
     $pageTitle = 'Customer Credit Control';
 }
 
+// Resolve company currency once — used in the view for totals/summaries and
+// as the fallback for customers whose currency is not explicitly set.
+require_once APP_ROOT . '/includes/company_functions.php';
+$companyCurrency = getCompanyCurrency($pdo);
+
 require APP_ROOT . '/views/customer_receivables.html';

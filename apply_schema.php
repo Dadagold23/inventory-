@@ -32,13 +32,13 @@ try {
     exit(1);
 }
 
-// Step 2: Apply modules 1-21 in order
+// Step 2: Apply modules 1-22 in order
 $moduleFiles = [];
-for ($i = 1; $i <= 21; $i++) {
+for ($i = 1; $i <= 22; $i++) {
     $moduleFiles[] = "db/schema_module" . $i . ".sql";
 }
 
-echo "\nStep 2: Applying modules 1-21...\n";
+echo "\nStep 2: Applying modules 1-22...\n";
 foreach ($moduleFiles as $index => $moduleFile) {
     if (!file_exists($moduleFile)) {
         echo "  ✗ $moduleFile not found, skipping\n";

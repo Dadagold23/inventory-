@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userId,
             $companyId,
             $branchId,
-            round((float) ($_POST['opening_float'] ?? 0), 4),
+            moneyInput($_POST['opening_float'] ?? 0),
             trim((string) ($_POST['opening_note'] ?? ''))
         );
         $_SESSION['auth_message'] = $result['message']
@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo,
             $shiftId,
             (string) ($_POST['movement_type'] ?? ''),
-            round((float) ($_POST['amount'] ?? 0), 4),
+            moneyInput($_POST['amount'] ?? 0),
             $companyId,
             trim((string) ($_POST['reason'] ?? '')),
             (int) ($_POST['reference_invoice_id'] ?? 0) ?: null
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo,
             $shiftId,
             $companyId,
-            $countRaw === '' ? null : round((float) $countRaw, 4),
+            $countRaw === '' ? null : moneyInput($countRaw),
             trim((string) ($_POST['closing_note'] ?? ''))
         );
         $_SESSION['auth_message'] = $result['message'];
@@ -185,6 +185,8 @@ $branches = getBranchesByCompany($pdo, $companyId);
 $myOpenShift = shiftCurrentFor($pdo, $userId, $companyId, shiftResolveBranchIdSafe($pdo, $companyId));
 $paymentMethods = salesPaymentMethodOptions($pdo, $companyId);
 $cashCodes = shiftCashMethodCodes($pdo, $companyId);
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require_once APP_ROOT . '/views/shifts.html';
 

@@ -14,6 +14,7 @@ defined('CUSTOMER_MODULE') || define('CUSTOMER_MODULE', 'customer');
 // Require foundation
 defined('APP_ROOT') || define('APP_ROOT', dirname(__DIR__));
 require_once APP_ROOT . '/config/database.php';
+require_once APP_ROOT . '/includes/helpers.php';
 
 // ============================================================
 // Internal helpers
@@ -66,9 +67,9 @@ function getCustomersByCompanyWithCredit(PDO $pdo, int $companyId = 1): array {
         FROM customers c
         LEFT JOIN (
             SELECT si.customer_id,
-                   SUM(si.total_amount - si.amount_paid) AS outstanding,
+                   SUM(si.base_amount_owed) AS outstanding,
                    SUM(CASE WHEN si.due_date IS NOT NULL AND si.due_date < CURDATE()
-                            THEN si.total_amount - si.amount_paid ELSE 0 END) AS overdue_amount,
+                            THEN si.base_amount_owed ELSE 0 END) AS overdue_amount,
                    COUNT(*) AS open_invoices,
                    MIN(CASE WHEN si.due_date IS NOT NULL AND si.due_date < CURDATE()
                             THEN si.due_date END) AS oldest_due_date
@@ -77,7 +78,7 @@ function getCustomersByCompanyWithCredit(PDO $pdo, int $companyId = 1): array {
             GROUP BY si.customer_id
         ) open_invoices ON open_invoices.customer_id = c.customer_id
         LEFT JOIN (
-            SELECT cp.customer_id, SUM(cp.amount) AS total_paid, COUNT(*) AS payment_count
+            SELECT cp.customer_id, SUM(cp.base_amount) AS total_paid, COUNT(*) AS payment_count
             FROM customer_payments cp
             GROUP BY cp.customer_id
         ) paid ON paid.customer_id = c.customer_id
@@ -110,9 +111,9 @@ function getCustomerAging(PDO $pdo, int $customerId): array {
         FROM customers c
         LEFT JOIN (
             SELECT si.customer_id,
-                   SUM(si.total_amount - si.amount_paid) AS outstanding,
+                   SUM(si.base_amount_owed) AS outstanding,
                    SUM(CASE WHEN si.due_date IS NOT NULL AND si.due_date < CURDATE()
-                            THEN si.total_amount - si.amount_paid ELSE 0 END) AS overdue_amount,
+                            THEN si.base_amount_owed ELSE 0 END) AS overdue_amount,
                    COUNT(*) AS open_invoices,
                    MIN(CASE WHEN si.due_date IS NOT NULL AND si.due_date < CURDATE()
                             THEN si.due_date END) AS oldest_due_date
@@ -121,7 +122,7 @@ function getCustomerAging(PDO $pdo, int $customerId): array {
             GROUP BY si.customer_id
         ) open_invoices ON open_invoices.customer_id = c.customer_id
         LEFT JOIN (
-            SELECT cp.customer_id, SUM(cp.amount) AS total_paid, COUNT(*) AS payment_count
+            SELECT cp.customer_id, SUM(cp.base_amount) AS total_paid, COUNT(*) AS payment_count
             FROM customer_payments cp
             GROUP BY cp.customer_id
         ) paid ON paid.customer_id = c.customer_id
@@ -175,7 +176,15 @@ function customerHasCreditAvailable(PDO $pdo, int $customerId, float $amount): b
     if ($customer === []) {
         return false;
     }
-    $limit = (float) ($customer['credit_limit'] ?? 0);
+    $currency = customerCurrencyCode($customer);
+    try {
+        $rate = currencyExchangeRate($pdo, $currency);
+    } catch (RuntimeException $e) {
+        app_log('warning', 'Credit check skipped: ' . $e->getMessage());
+        return false;
+    }
+    $limit = toBaseAmount((float) ($customer['credit_limit'] ?? 0), $rate);
+    $amount = toBaseAmount($amount, $rate);
     // A zero limit means "no credit facility is configured", not "no credit".
     if ($limit <= 0) {
         return false;
@@ -295,8 +304,8 @@ function createCustomerStatement(PDO $pdo, int $companyId, int $customerId, stri
     }
 
     $invoiceStmt = $pdo->prepare("
-        SELECT COALESCE(SUM(CASE WHEN si.issue_date < ? THEN si.total_amount ELSE 0 END), 0) AS opening_sales,
-               COALESCE(SUM(CASE WHEN si.issue_date BETWEEN ? AND ? THEN si.total_amount ELSE 0 END), 0) AS period_sales
+        SELECT COALESCE(SUM(CASE WHEN si.issue_date < ? THEN si.base_total_amount ELSE 0 END), 0) AS opening_sales,
+               COALESCE(SUM(CASE WHEN si.issue_date BETWEEN ? AND ? THEN si.base_total_amount ELSE 0 END), 0) AS period_sales
         FROM sales_invoices si
         WHERE si.customer_id = ? AND si.company_id = ?
           AND si.status IN ('pending', 'partial', 'paid')
@@ -305,8 +314,8 @@ function createCustomerStatement(PDO $pdo, int $companyId, int $customerId, stri
     $invoiceTotals = $invoiceStmt->fetch(PDO::FETCH_ASSOC) ?: ['opening_sales' => 0, 'period_sales' => 0];
 
     $paymentStmt = $pdo->prepare("
-        SELECT COALESCE(SUM(CASE WHEN cp.payment_date < ? THEN cp.amount ELSE 0 END), 0) AS opening_payments,
-               COALESCE(SUM(CASE WHEN cp.payment_date BETWEEN ? AND ? THEN cp.amount ELSE 0 END), 0) AS period_payments
+        SELECT COALESCE(SUM(CASE WHEN cp.payment_date < ? THEN cp.base_amount ELSE 0 END), 0) AS opening_payments,
+               COALESCE(SUM(CASE WHEN cp.payment_date BETWEEN ? AND ? THEN cp.base_amount ELSE 0 END), 0) AS period_payments
         FROM customer_payments cp
         INNER JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
         WHERE cp.customer_id = ? AND cp.company_id = ?
@@ -459,8 +468,17 @@ function getAgingClass(float $daysOverdue): string {
 }
 
 /**
- * Format an amount using the company currency settings.
+ * Format an amount using the customer's currency (NGN for Nigerian customers,
+ * foreign currency for international customers).
+ *
+ * @param PDO    $pdo      Database connection (used to look up company default).
+ * @param float  $price    The amount to format.
+ * @param array  $customer Customer row; used to derive the correct currency code.
  */
-function formatStatementCurrency(PDO $pdo, float $price): string {
-    return formatPrice($price);
+function formatStatementCurrency(PDO $pdo, float $price, array $customer = []): string {
+    $companyCurrency = function_exists('getCompanyCurrency') ? getCompanyCurrency($pdo) : 'NGN';
+    $code = function_exists('customerCurrencyCode')
+        ? customerCurrencyCode($customer, $companyCurrency)
+        : $companyCurrency;
+    return formatPrice($price, null, $code);
 }

@@ -5,8 +5,8 @@ $pageDescription = 'Income sources, recognition and payment tracking.';
 $activeNav = 'income';
 ob_start();
 ?>
-<span class="badge bg-primary align-self-center">Total: <?php echo formatPrice($totalIncome); ?></span>
-<span class="badge bg-success align-self-center">Received: <?php echo formatPrice($totalReceived); ?></span>
+<span class="badge bg-primary align-self-center">Total: <?php echo formatPrice($totalIncome, null, $companyCurrency); ?></span>
+<span class="badge bg-success align-self-center">Received: <?php echo formatPrice($totalReceived, null, $companyCurrency); ?></span>
 <?php
 $pageActions = ob_get_clean();
 require APP_ROOT . '/views/layout/header.php';
@@ -75,7 +75,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         </td>
                                         <td><?php echo e($row['code'] ?? '—'); ?></td>
                                         <td class="text-end"><?php echo (int) $row['transaction_count']; ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['total_received']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_received'], null, $companyCurrency); ?></td>
                                         <td><span class="badge bg-<?php echo (int) $row['is_active'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $row['is_active'] === 1 ? 'Active' : 'Inactive'; ?></span></td>
                                         <td class="text-end">
                                             <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/income?action=sources&source_id=' . (int) $row['income_source_id'])); ?>"><i class="fas fa-edit"></i></a>
@@ -150,7 +150,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <select class="form-select" id="sales_invoice_id" name="sales_invoice_id">
                                         <option value="">-- None --</option>
                                         <?php foreach ($invoices as $invoiceRow): ?>
-                                        <option value="<?php echo (int) $invoiceRow['invoice_id']; ?>" <?php echo (int) ($transaction['sales_invoice_id'] ?? 0) === (int) $invoiceRow['invoice_id'] ? 'selected' : ''; ?>><?php echo e($invoiceRow['invoice_number']); ?> &mdash; <?php echo formatPrice((float) $invoiceRow['total_amount']); ?></option>
+                                        <option value="<?php echo (int) $invoiceRow['invoice_id']; ?>" <?php echo (int) ($transaction['sales_invoice_id'] ?? 0) === (int) $invoiceRow['invoice_id'] ? 'selected' : ''; ?>><?php echo e($invoiceRow['invoice_number']); ?> &mdash; <?php echo formatPrice((float) $invoiceRow['total_amount'], null, $companyCurrency); ?></option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
@@ -169,12 +169,12 @@ require APP_ROOT . '/views/layout/header.php';
                                     <textarea class="form-control" id="description" name="description" rows="2"><?php echo e($transaction['description'] ?? ''); ?></textarea>
                                 </div>
                                 <div class="row g-2 mb-3">
-                                    <div class="col-6"><label class="form-label" for="gross_amount">Gross</label><input class="form-control income-calc" type="number" step="0.0001" min="0" id="gross_amount" name="gross_amount" value="<?php echo e($transaction['gross_amount'] ?? '0.0000'); ?>"></div>
-                                    <div class="col-6"><label class="form-label" for="discount_amount">Discount</label><input class="form-control income-calc" type="number" step="0.0001" min="0" id="discount_amount" name="discount_amount" value="<?php echo e($transaction['discount_amount'] ?? '0.0000'); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="gross_amount">Gross</label><input class="form-control income-calc" type="number" step="1" min="0" id="gross_amount" name="gross_amount" value="<?php echo e(number_format((float) ($transaction['gross_amount'] ?? 0), 0, '.', '')); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="discount_amount">Discount</label><input class="form-control income-calc" type="number" step="1" min="0" id="discount_amount" name="discount_amount" value="<?php echo e(number_format((float) ($transaction['discount_amount'] ?? 0), 0, '.', '')); ?>"></div>
                                 </div>
                                 <div class="row g-2 mb-3">
-                                    <div class="col-6"><label class="form-label" for="tax_amount">Tax</label><input class="form-control income-calc" type="number" step="0.0001" min="0" id="tax_amount" name="tax_amount" value="<?php echo e($transaction['tax_amount'] ?? '0.0000'); ?>"></div>
-                                    <div class="col-6"><label class="form-label" for="total_display">Total</label><input class="form-control" id="total_display" value="<?php echo e($transaction['total_amount'] ?? '0.0000'); ?>" readonly></div>
+                                    <div class="col-6"><label class="form-label" for="tax_amount">Tax</label><input class="form-control income-calc" type="number" step="1" min="0" id="tax_amount" name="tax_amount" value="<?php echo e(number_format((float) ($transaction['tax_amount'] ?? 0), 0, '.', '')); ?>"></div>
+                                    <div class="col-6"><label class="form-label" for="total_display">Total</label><input class="form-control" id="total_display" value="<?php echo e(number_format((float) ($transaction['total_amount'] ?? 0), 0, '.', '')); ?>" readonly></div>
                                 </div>
                                 <div class="row g-2 mb-3">
                                     <div class="col-6">
@@ -212,7 +212,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><span class="badge bg-<?php echo ['paid' => 'success', 'partial' => 'warning', 'write_off' => 'danger', 'cancelled' => 'danger'][$row['payment_status']] ?? 'secondary'; ?>"><?php echo e($row['payment_status']); ?></span></td>
                                         <td class="text-end"><?php echo (int) $row['count']; ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount'], null, $companyCurrency); ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -240,7 +240,7 @@ require APP_ROOT . '/views/layout/header.php';
                                         <td><?php echo e($row['source_name'] ?? '—'); ?></td>
                                         <td><?php echo e($row['customer_name'] ?? 'Walk-in'); ?></td>
                                         <td><?php echo e($row['income_date']); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $row['total_amount'], null, $companyCurrency); ?></td>
                                         <td><span class="badge bg-<?php echo ['paid' => 'success', 'partial' => 'warning', 'write_off' => 'danger', 'cancelled' => 'danger'][$row['payment_status']] ?? 'secondary'; ?>"><?php echo e($row['payment_status']); ?></span></td>
                                         <td><span class="badge bg-<?php echo (int) $row['recognized'] === 1 ? 'success' : 'secondary'; ?>"><?php echo (int) $row['recognized'] === 1 ? 'Yes' : 'No'; ?></span></td>
                                         <td class="text-end text-nowrap">

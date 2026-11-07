@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'postal_code' => trim((string) ($_POST['postal_code'] ?? '')),
             'country' => trim((string) ($_POST['country'] ?? '')),
             'payment_terms' => trim((string) ($_POST['payment_terms'] ?? 'Net 30')),
-            'default_currency' => trim((string) ($_POST['default_currency'] ?? 'USD')),
+            'default_currency' => trim((string) ($_POST['default_currency'] ?? getCompanyCurrency($pdo))),
             'is_active' => !empty($_POST['is_active']) ? 1 : 0,
         ];
 
@@ -115,17 +115,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($postAction === 'save_po') {
         $targetId = (int) ($_POST['po_id'] ?? 0);
         $vendorId = (int) ($_POST['supplier_id'] ?? 0);
-        $subtotal = (float) ($_POST['po_subtotal'] ?? 0);
+        $subtotal = moneyInput($_POST['po_subtotal'] ?? 0);
         $discountPercent = (float) ($_POST['po_discount_percent'] ?? 0);
-        $discountAmount = (float) ($_POST['po_discount_amount'] ?? 0);
+        $discountAmount = moneyInput($_POST['po_discount_amount'] ?? 0);
         $taxRate = (float) ($_POST['po_tax_rate'] ?? 0);
 
         if ($discountAmount <= 0 && $discountPercent > 0 && $subtotal > 0) {
-            $discountAmount = $subtotal * ($discountPercent / 100);
+            $discountAmount = moneyRound($subtotal * ($discountPercent / 100));
         }
         $taxable = max($subtotal - $discountAmount, 0);
-        $taxAmount = $taxable * $taxRate;
-        $totalAmount = $taxable + $taxAmount;
+        $taxAmount = moneyRound($taxable * $taxRate);
+        $totalAmount = moneyRound($taxable + $taxAmount);
 
         if ($vendorId <= 0) {
             $_SESSION['auth_message'] = 'Select a supplier for the purchase order.';
@@ -183,8 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lineId = addPurchaseOrderLine($pdo, $targetId, [
             'product_id' => (int) ($_POST['product_id'] ?? 0),
             'quantity' => (float) ($_POST['quantity'] ?? 0),
-            'unit_price' => (float) ($_POST['unit_price'] ?? 0),
-            'unit_cost' => (float) ($_POST['unit_cost'] ?? 0),
+            'unit_price' => moneyInput($_POST['unit_price'] ?? 0),
+            'unit_cost' => moneyInput($_POST['unit_cost'] ?? 0),
         ]);
 
         $_SESSION['auth_message'] = $lineId > 0
@@ -217,8 +217,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'receipt_number' => trim((string) ($_POST['receipt_number'] ?? '')),
             'invoice_date' => (string) ($_POST['invoice_date'] ?? date('Y-m-d')),
             'receipt_date' => (string) ($_POST['receipt_date'] ?? date('Y-m-d')),
-            'invoice_total' => (float) ($_POST['invoice_total'] ?? 0),
-            'receipt_total' => (float) ($_POST['receipt_total'] ?? 0),
+            'invoice_total' => moneyInput($_POST['invoice_total'] ?? 0),
+            'receipt_total' => moneyInput($_POST['receipt_total'] ?? 0),
             'invoiced_quantity' => (float) ($_POST['invoiced_qty'] ?? 0),
             'received_quantity' => (float) ($_POST['received_qty'] ?? 0),
             'notes' => trim((string) ($_POST['ir_notes'] ?? '')),
@@ -233,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($postAction === 'record_sp_payment') {
         $vendorId = (int) ($_POST['supplier_id'] ?? 0);
-        $amount = (float) ($_POST['payment_amount'] ?? 0);
+        $amount = moneyInput($_POST['payment_amount'] ?? 0);
 
         $supplier = $vendorId > 0 ? getSupplierById($pdo, $vendorId) : null;
         if (!$supplier || (int) $supplier['company_id'] !== $companyId) {
@@ -351,5 +351,7 @@ if ($action === 'purchase_orders') {
 } else {
     $pageTitle = 'Suppliers';
 }
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require APP_ROOT . '/views/ap.html';

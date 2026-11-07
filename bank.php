@@ -66,10 +66,10 @@ if ($action === 'list' || $action === 'manage_banks') {
             $name = trim((string) ($_POST['bank_name'] ?? ''));
             $accountNumber = trim((string) ($_POST['account_number'] ?? ''));
             $accountType = trim((string) ($_POST['account_type'] ?? 'checking'));
-            $currency = strtoupper(substr(trim((string) ($_POST['currency'] ?? 'USD')), 0, 3));
+            $currency = strtoupper(substr(trim((string) ($_POST['currency'] ?? getCompanyCurrency($pdo))), 0, 3));
             $isActive = !empty($_POST['is_active']) ? 1 : 0;
             $sortOrder = max(0, (int) ($_POST['sort_order'] ?? 0));
-            $openingBalance = round((float) ($_POST['opening_balance'] ?? 0), 4);
+            $openingBalance = moneyInput($_POST['opening_balance'] ?? 0);
             
             if ($name === '') {
                 $_SESSION['auth_message'] = 'Bank name is required.';
@@ -87,7 +87,7 @@ if ($action === 'list' || $action === 'manage_banks') {
                     'name' => $name,
                     'account_number' => $accountNumber !== '' ? $accountNumber : null,
                     'account_type' => $accountType,
-                    'currency' => $currency !== '' ? $currency : 'USD',
+                    'currency' => $currency !== '' ? $currency : getCompanyCurrency($pdo),
                     'is_active' => $isActive,
                     'sort_order' => $sortOrder,
                 ]);
@@ -97,7 +97,7 @@ if ($action === 'list' || $action === 'manage_banks') {
                     'name' => $name,
                     'account_number' => $accountNumber !== '' ? $accountNumber : null,
                     'account_type' => $accountType,
-                    'currency' => $currency !== '' ? $currency : 'USD',
+                    'currency' => $currency !== '' ? $currency : getCompanyCurrency($pdo),
                     'balance' => $openingBalance,
                     'is_active' => $isActive,
                     'sort_order' => $sortOrder,
@@ -111,7 +111,7 @@ if ($action === 'list' || $action === 'manage_banks') {
         if ($saveAction === 'record_transaction') {
             $bankId = $_POST['bank_id'] ?? 0;
             $type = $_POST['transaction_type'] ?? 'deposit';
-            $amount = floatval($_POST['amount'] ?? '0.0000');
+            $amount = moneyInput($_POST['amount'] ?? 0);
             $description = $_POST['description'] ?? '';
             $referenceNumber = $_POST['reference_number'] ?? '';
             
@@ -186,5 +186,7 @@ $banks = getBanksByCompany($pdo, $companyId);
 // ============================================================
 
 $viewFile = 'views/bank.html';
+
+$companyCurrency = getCompanyCurrency($pdo);
 
 require_once APP_ROOT . '/views/' . basename($viewFile);

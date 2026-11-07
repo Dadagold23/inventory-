@@ -3,6 +3,12 @@ $pageHeading = 'Receivables';
 $pageEyebrow = 'Customer balances';
 $pageDescription = 'Balances, aging, statements and credit control for <strong>' . e($customer['name'] ?? 'all customers') . '</strong>.';
 $activeNav = 'receivables';
+
+// Credit limits are set in customer currency; receivable balances are kept in
+// the company's Naira ledger.
+$viewCurrency = $customer !== []
+    ? customerCurrencyCode($customer, $companyCurrency)
+    : $companyCurrency;
 ob_start();
 ?>
 <a class="btn btn-sm btn-primary" href="<?php echo e(url('/sales?action=customers')); ?>">
@@ -35,15 +41,15 @@ require APP_ROOT . '/views/layout/header.php';
                         </div>
                         <div class="col-6 col-lg-2">
                             <div class="text-muted small">Credit Limit</div>
-                            <div class="fw-semibold"><?php echo formatPrice((float) ($customer['credit_limit'] ?? 0)); ?></div>
+                            <div class="fw-semibold"><?php echo formatPrice((float) ($customer['credit_limit'] ?? 0), null, $viewCurrency); ?></div>
                         </div>
                         <div class="col-6 col-lg-2">
                             <div class="text-muted small">Outstanding</div>
-                            <div class="fw-semibold"><?php echo formatPrice((float) ($customer['outstanding'] ?? 0)); ?></div>
+                            <div class="fw-semibold"><?php echo formatPrice((float) ($customer['outstanding'] ?? 0), null, $companyCurrency); ?></div>
                         </div>
                         <div class="col-6 col-lg-2">
                             <div class="text-muted small">Overdue</div>
-                            <div class="fw-semibold text-danger"><?php echo formatPrice((float) ($customer['overdue_amount'] ?? 0)); ?></div>
+                            <div class="fw-semibold text-danger"><?php echo formatPrice((float) ($customer['overdue_amount'] ?? 0), null, $companyCurrency); ?></div>
                         </div>
                         <div class="col-6 col-lg-2">
                             <div class="text-muted small">Payment Terms</div>
@@ -71,8 +77,8 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><?php echo e($inv['invoice_number']); ?></td>
                                         <td><?php echo e(date('M d, Y', strtotime($inv['issue_date']))); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $inv['total_amount']); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $inv['amount_owed']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $inv['total_amount'], null, (string) ($inv['currency'] ?? $viewCurrency)); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $inv['amount_owed'], null, (string) ($inv['currency'] ?? $viewCurrency)); ?></td>
                                         <td><span class="badge bg-secondary"><?php echo e($inv['status']); ?></span></td>
                                     </tr>
                                     <?php endforeach; ?>
@@ -95,7 +101,7 @@ require APP_ROOT . '/views/layout/header.php';
                                     <tr>
                                         <td><?php echo e(date('M d, Y', strtotime($payment['payment_date']))); ?></td>
                                         <td><?php echo e($payment['invoice_number'] ?? '—'); ?></td>
-                                        <td class="text-end"><?php echo formatPrice((float) $payment['amount']); ?></td>
+                                        <td class="text-end"><?php echo formatPrice((float) $payment['amount'], null, (string) ($payment['currency'] ?? $viewCurrency)); ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                     <?php endif; ?>
@@ -129,7 +135,7 @@ require APP_ROOT . '/views/layout/header.php';
                     <div class="card text-white bg-primary h-100">
                         <div class="card-body">
                             <h6 class="card-title text-uppercase small mb-2">Total Receivables</h6>
-                            <p class="card-text fs-4 mb-0"><?php echo formatPrice($totalOutstanding); ?></p>
+                            <p class="card-text fs-4 mb-0"><?php echo formatPrice($totalOutstanding, null, $companyCurrency); ?></p>
                         </div>
                     </div>
                 </div>
@@ -137,7 +143,7 @@ require APP_ROOT . '/views/layout/header.php';
                     <div class="card text-white bg-danger h-100">
                         <div class="card-body">
                             <h6 class="card-title text-uppercase small mb-2">Total Overdue</h6>
-                            <p class="card-text fs-4 mb-0"><?php echo formatPrice($totalOverdue); ?></p>
+                            <p class="card-text fs-4 mb-0"><?php echo formatPrice($totalOverdue, null, $companyCurrency); ?></p>
                         </div>
                     </div>
                 </div>
@@ -163,31 +169,31 @@ require APP_ROOT . '/views/layout/header.php';
                 <div class="col-6 col-lg">
                     <div class="card h-100"><div class="card-body py-3">
                         <div class="text-muted small text-uppercase">Current</div>
-                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['current']); ?></div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['current'], null, $companyCurrency); ?></div>
                     </div></div>
                 </div>
                 <div class="col-6 col-lg">
                     <div class="card h-100"><div class="card-body py-3">
                         <div class="text-muted small text-uppercase">1-30 Days</div>
-                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_1_30']); ?></div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_1_30'], null, $companyCurrency); ?></div>
                     </div></div>
                 </div>
                 <div class="col-6 col-lg">
                     <div class="card h-100"><div class="card-body py-3">
                         <div class="text-muted small text-uppercase">31-60 Days</div>
-                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_31_60']); ?></div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_31_60'], null, $companyCurrency); ?></div>
                     </div></div>
                 </div>
                 <div class="col-6 col-lg">
                     <div class="card h-100"><div class="card-body py-3">
                         <div class="text-muted small text-uppercase">61-90 Days</div>
-                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_61_90']); ?></div>
+                        <div class="fw-semibold"><?php echo formatPrice((float) $agingBuckets['days_61_90'], null, $companyCurrency); ?></div>
                     </div></div>
                 </div>
                 <div class="col-6 col-lg">
                     <div class="card h-100"><div class="card-body py-3">
                         <div class="text-muted small text-uppercase">90+ Days</div>
-                        <div class="fw-semibold text-danger"><?php echo formatPrice((float) $agingBuckets['days_over_90']); ?></div>
+                        <div class="fw-semibold text-danger"><?php echo formatPrice((float) $agingBuckets['days_over_90'], null, $companyCurrency); ?></div>
                     </div></div>
                 </div>
             </div>
@@ -218,7 +224,14 @@ require APP_ROOT . '/views/layout/header.php';
                             <?php foreach ($overdueCustomers as $row): ?>
                             <?php
                                 $days = customerDaysOverdue($row);
-                                $available = (float) $row['credit_limit'] - (float) $row['outstanding'];
+                                $rowCurrency = customerCurrencyCode($row, $companyCurrency);
+                                $available = null;
+                                try {
+                                    $creditLimitBase = toBaseAmount((float) $row['credit_limit'], currencyExchangeRate($pdo, $rowCurrency));
+                                    $available = $creditLimitBase - (float) $row['outstanding'];
+                                } catch (RuntimeException $e) {
+                                    app_log('warning', 'Credit limit conversion unavailable: ' . $e->getMessage());
+                                }
                             ?>
                             <tr>
                                 <td>
@@ -227,12 +240,12 @@ require APP_ROOT . '/views/layout/header.php';
                                     </a>
                                     <?php if ((int) $row['is_active'] !== 1): ?><span class="badge bg-secondary ms-1">Inactive</span><?php endif; ?>
                                 </td>
-                                <td class="text-end"><?php echo formatPrice((float) $row['outstanding']); ?></td>
-                                <td class="text-end text-danger"><?php echo formatPrice((float) $row['overdue_amount']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['outstanding'], null, $companyCurrency); ?></td>
+                                <td class="text-end text-danger"><?php echo formatPrice((float) $row['overdue_amount'], null, $companyCurrency); ?></td>
                                 <td><?php echo e($row['oldest_due_date'] ? date('M d, Y', strtotime($row['oldest_due_date'])) : '—'); ?></td>
                                 <td><span class="badge bg-<?php echo $days > 90 ? 'danger' : ($days > 60 ? 'warning text-dark' : 'info text-dark'); ?>"><?php echo e(getAgingCategory((float) $days)); ?></span></td>
-                                <td class="text-end"><?php echo formatPrice((float) $row['credit_limit']); ?></td>
-                                <td class="text-end <?php echo $available < 0 ? 'text-danger' : ''; ?>"><?php echo formatPrice($available); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['credit_limit'], null, $rowCurrency); ?></td>
+                                <td class="text-end <?php echo $available !== null && $available < 0 ? 'text-danger' : ''; ?>"><?php echo $available === null ? '<span class="text-warning">Rate unavailable</span>' : formatPrice($available, null, $companyCurrency); ?></td>
                                 <td class="text-end">
                                     <a class="btn btn-sm btn-outline-primary" href="<?php echo e(url('/customer_receivables?action=statements&customer_id=' . (int) $row['customer_id'])); ?>" title="Statement">
                                         <i class="fas fa-file-alt"></i>
@@ -319,10 +332,10 @@ require APP_ROOT . '/views/layout/header.php';
                             <tr>
                                 <td><?php echo e(date('M d, Y', strtotime($statement['statement_date']))); ?></td>
                                 <td><?php echo e(date('M d, Y', strtotime($statement['period_start']))); ?> – <?php echo e(date('M d, Y', strtotime($statement['period_end']))); ?></td>
-                                <td class="text-end"><?php echo formatPrice((float) $statement['opening_balance']); ?></td>
-                                <td class="text-end"><?php echo formatPrice((float) $statement['sales_amount']); ?></td>
-                                <td class="text-end"><?php echo formatPrice((float) $statement['payments_received']); ?></td>
-                                <td class="text-end fw-semibold"><?php echo formatPrice((float) $statement['ending_balance']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $statement['opening_balance'], null, $companyCurrency); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $statement['sales_amount'], null, $companyCurrency); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $statement['payments_received'], null, $companyCurrency); ?></td>
+                                <td class="text-end fw-semibold"><?php echo formatPrice((float) $statement['ending_balance'], null, $companyCurrency); ?></td>
                                 <td><span class="badge bg-<?php echo $statement['status'] === 'sent' ? 'success' : 'secondary'; ?>"><?php echo e(ucfirst($statement['status'])); ?></span></td>
                                 <td class="text-end">
                                     <?php if ($statement['status'] !== 'sent'): ?>
@@ -456,7 +469,16 @@ require APP_ROOT . '/views/layout/header.php';
                             <tr><td colspan="9" class="text-center text-muted py-4">No customers have been created yet.</td></tr>
                             <?php else: ?>
                             <?php foreach ($customers as $row): ?>
-                            <?php $available = (float) $row['credit_limit'] - (float) $row['outstanding']; ?>
+                            <?php
+                                $ccRowCurrency = customerCurrencyCode($row, $companyCurrency);
+                                $available = null;
+                                try {
+                                    $creditLimitBase = toBaseAmount((float) $row['credit_limit'], currencyExchangeRate($pdo, $ccRowCurrency));
+                                    $available = $creditLimitBase - (float) $row['outstanding'];
+                                } catch (RuntimeException $e) {
+                                    app_log('warning', 'Credit limit conversion unavailable: ' . $e->getMessage());
+                                }
+                            ?>
                             <tr>
                                 <td>
                                     <?php echo e($row['name']); ?>
@@ -466,10 +488,10 @@ require APP_ROOT . '/views/layout/header.php';
                                     <?php echo e($row['email'] ?: '—'); ?><br><?php echo e($row['phone'] ?: ''); ?>
                                 </td>
                                 <td><?php echo e($row['payment_terms']); ?></td>
-                                <td class="text-end"><?php echo formatPrice((float) $row['credit_limit']); ?></td>
-                                <td class="text-end"><?php echo formatPrice((float) $row['outstanding']); ?></td>
-                                <td class="text-end <?php echo $available < 0 ? 'text-danger' : ''; ?>"><?php echo formatPrice($available); ?></td>
-                                <td class="text-end <?php echo (float) $row['overdue_amount'] > 0 ? 'text-danger' : ''; ?>"><?php echo formatPrice((float) $row['overdue_amount']); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['credit_limit'], null, $ccRowCurrency); ?></td>
+                                <td class="text-end"><?php echo formatPrice((float) $row['outstanding'], null, $companyCurrency); ?></td>
+                                <td class="text-end <?php echo $available !== null && $available < 0 ? 'text-danger' : ''; ?>"><?php echo $available === null ? '<span class="text-warning">Rate unavailable</span>' : formatPrice($available, null, $companyCurrency); ?></td>
+                                <td class="text-end <?php echo (float) $row['overdue_amount'] > 0 ? 'text-danger' : ''; ?>"><?php echo formatPrice((float) $row['overdue_amount'], null, $companyCurrency); ?></td>
                                 <td>
                                     <span class="badge bg-<?php echo ($row['payment_status'] ?? 'current') === 'overdue' ? 'danger' : (($row['payment_status'] ?? 'current') === 'open' ? 'info text-dark' : 'success'); ?>">
                                         <?php echo e(ucfirst($row['payment_status'] ?? 'current')); ?>
@@ -516,7 +538,7 @@ require APP_ROOT . '/views/layout/header.php';
                                 <p class="text-muted">Customer: <strong id="credit_customer_name"></strong></p>
                                 <div class="mb-3">
                                     <label class="form-label" for="credit_limit">Credit Limit</label>
-                                    <input type="number" step="0.0001" min="0" class="form-control" id="credit_limit" name="credit_limit" required>
+                                    <input type="number" step="1" min="0" class="form-control" id="credit_limit" name="credit_limit" required>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label" for="payment_terms">Payment Terms</label>
