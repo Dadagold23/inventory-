@@ -275,15 +275,22 @@ function reportCashFlow(PDO $pdo, int $companyId, string $start, string $end): a
 {
     $inflows = [];
 
+    $scopeUserId = auth_sales_scope_user_id();
+    $paymentScopeSql = $scopeUserId === null ? '' : ' AND si.created_by = ?';
+    $paymentParams = [$companyId, $start, $end];
+    if ($scopeUserId !== null) {
+        $paymentParams[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
-        SELECT CONCAT('Customer payments (', REPLACE(payment_method, '_', ' '), ')') AS label,
-               COALESCE(SUM(base_amount), 0) AS amount
-        FROM customer_payments
-        WHERE company_id = ? AND payment_date BETWEEN ? AND ?
+        SELECT CONCAT('Customer payments (', REPLACE(p.payment_method, '_', ' '), ')') AS label,
+               COALESCE(SUM(p.base_amount), 0) AS amount
+        FROM customer_payments p
+        INNER JOIN sales_invoices si ON si.invoice_id = p.invoice_id
+        WHERE p.company_id = ? AND p.payment_date BETWEEN ? AND ? $paymentScopeSql
         GROUP BY payment_method
         ORDER BY amount DESC
     ");
-    $stmt->execute([$companyId, $start, $end]);
+    $stmt->execute($paymentParams);
     $inflows = array_merge($inflows, $stmt->fetchAll(PDO::FETCH_ASSOC));
 
     $stmt = $pdo->prepare("
@@ -420,6 +427,11 @@ function reportSalesAnalytics(PDO $pdo, int $companyId, string $start, string $e
     // side, so a cancelled sale can never inflate either figure.
     $scope = "si.company_id = ? AND si.issue_date BETWEEN ? AND ? AND $revenue";
     $scopeParams = [$companyId, $start, $end];
+    $scopeUserId = auth_sales_scope_user_id();
+    if ($scopeUserId !== null) {
+        $scope .= ' AND si.created_by = ?';
+        $scopeParams[] = $scopeUserId;
+    }
     if ($branchId > 0) {
         $scope .= ' AND si.branch_id = ?';
         $scopeParams[] = $branchId;

@@ -30,6 +30,7 @@ $action = $_GET['action'] ?? ($_POST['action'] ?? 'list');
 
 $writeVerbs = [
     'open' => 'create',
+    'open_for_staff' => 'create',
     'movement' => 'update',
     'close' => 'update',
     'void' => 'delete',
@@ -70,6 +71,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $_SESSION['auth_message'] = $result['message']
             . ($result['success'] ? ' The register is ready for sales.' : '');
+        redirect('/shifts?action=' . ($result['success'] ? 'detail&shift_id=' . (int) $result['shift_id'] : 'new'));
+    }
+
+    if ($action === 'open_for_staff') {
+        if ((auth_user()['role'] ?? '') !== 'admin') {
+            http_response_code(403);
+            exit('Only administrators can open shifts for staff.');
+        }
+
+        $departmentId = (int) ($_POST['department_id'] ?? 0);
+        $targetUserId = (int) ($_POST['target_user_id'] ?? 0);
+        $targetStmt = $pdo->prepare(
+            "SELECT u.user_id, u.department_id, u.branch_id, d.branch_id AS department_branch_id
+             FROM users u
+             INNER JOIN departments d ON d.department_id = u.department_id
+             WHERE u.user_id = ? AND u.company_id = ? AND u.is_active = 1
+               AND u.role <> 'admin' AND u.department_id = ?
+               AND d.company_id = u.company_id AND d.is_active = 1"
+        );
+        $targetStmt->execute([$targetUserId, $companyId, $departmentId]);
+        $target = $targetStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$target) {
+            $_SESSION['auth_message'] = 'Select an active staff member assigned to that department.';
+            redirect('/shifts?action=new');
+        }
+
+        try {
+            $requestedBranchId = (int) ($target['branch_id'] ?: $target['department_branch_id']);
+            $branchId = shiftResolveBranchId($pdo, $companyId, $requestedBranchId);
+        } catch (RuntimeException $e) {
+            $_SESSION['auth_message'] = $e->getMessage();
+            redirect('/shifts?action=new');
+        }
+
+        $result = shiftOpen(
+            $pdo,
+            $targetUserId,
+            $companyId,
+            $branchId,
+            moneyInput($_POST['opening_float'] ?? 0),
+            trim((string) ($_POST['opening_note'] ?? '')),
+            $userId,
+            $departmentId
+        );
+        $_SESSION['auth_message'] = $result['message'];
         redirect('/shifts?action=' . ($result['success'] ? 'detail&shift_id=' . (int) $result['shift_id'] : 'new'));
     }
 
@@ -173,15 +219,39 @@ if ($action === 'report') {
 $shifts = shiftList($pdo, $companyId, $filters);
 
 // Cashiers for the filter and the open form's own row.
-$stmt = $pdo->prepare(
-    "SELECT u.user_id, u.full_name, u.username, u.role, b.name AS branch_name
-     FROM users u LEFT JOIN branches b ON b.branch_id = u.branch_id
-     WHERE u.company_id = ? AND u.is_active = 1 ORDER BY u.full_name"
-);
-$stmt->execute([$companyId]);
+$cashierSql = "SELECT u.user_id, u.full_name, u.username, u.role, b.name AS branch_name
+               FROM users u LEFT JOIN branches b ON b.branch_id = u.branch_id
+               WHERE u.company_id = ? AND u.is_active = 1";
+$cashierParams = [$companyId];
+$salesScopeUserId = auth_sales_scope_user_id();
+if ($salesScopeUserId !== null) {
+    $cashierSql .= ' AND u.user_id = ?';
+    $cashierParams[] = $salesScopeUserId;
+}
+$cashierSql .= ' ORDER BY u.full_name';
+$stmt = $pdo->prepare($cashierSql);
+$stmt->execute($cashierParams);
 $cashiers = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 $branches = getBranchesByCompany($pdo, $companyId);
+$departments = array_values(array_filter(
+    getAllDepartments($pdo, $companyId),
+    static fn (array $department): bool => !empty($department['is_active'])
+));
+$canOpenForStaff = (auth_user()['role'] ?? '') === 'admin';
+$staffOptions = [];
+if ($canOpenForStaff) {
+    $stmt = $pdo->prepare(
+        "SELECT u.user_id, u.full_name, u.username, u.department_id
+         FROM users u
+         INNER JOIN departments d ON d.department_id = u.department_id
+         WHERE u.company_id = ? AND u.is_active = 1 AND u.role <> 'admin'
+           AND d.company_id = u.company_id AND d.is_active = 1
+         ORDER BY d.name, u.full_name"
+    );
+    $stmt->execute([$companyId]);
+    $staffOptions = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
 $myOpenShift = shiftCurrentFor($pdo, $userId, $companyId, shiftResolveBranchIdSafe($pdo, $companyId));
 $paymentMethods = salesPaymentMethodOptions($pdo, $companyId);
 $cashCodes = shiftCashMethodCodes($pdo, $companyId);

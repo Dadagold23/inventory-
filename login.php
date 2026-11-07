@@ -21,18 +21,31 @@ try {
 $error = null;
 $message = null;
 $loginValue = '';
+$loginMode = 'staff';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pdo = get_db_connection();
     $loginValue = trim((string) ($_POST['username'] ?? ''));
+    $requestedLoginMode = strtolower(trim((string) ($_POST['login_mode'] ?? 'staff')));
+    if (in_array($requestedLoginMode, ['admin', 'staff'], true)) {
+        $loginMode = $requestedLoginMode;
+    }
 
-    if (!csrf_verify()) {
+    if (!in_array($requestedLoginMode, ['admin', 'staff'], true)) {
+        $error = 'Choose a valid sign-in type.';
+    } elseif (!csrf_verify()) {
         $error = 'Your session expired. Please try again.';
     } elseif (!$pdo instanceof PDO) {
         $error = 'The database is unavailable. Please contact your administrator.';
     } else {
         $result = auth_attempt($pdo, $loginValue, (string) ($_POST['password'] ?? ''));
-        if ($result['ok']) {
+        if (!$result['ok']) {
+            $error = $result['message'];
+        } elseif (($loginMode === 'admin') !== (strtolower((string) ($result['user']['role'] ?? '')) === 'admin')) {
+            $error = $loginMode === 'admin'
+                ? 'This account is not an administrator. Use Staff / Guest sign-in.'
+                : 'Administrator accounts must use Admin sign-in.';
+        } else {
             auth_start_session($result['user']);
             auth_audit(
                 $pdo,
@@ -57,7 +70,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             redirect($target);
         }
-        $error = $result['message'];
     }
 }
 
@@ -247,17 +259,18 @@ unset($_SESSION['_old']['login']);
 <div class="login-box">
   <div class="login-logo"><?= e($storeName) ?><span>Inventory Management System</span></div>
   <h1 class="login-title">Welcome back</h1>
-  <p class="login-sub">Sign in to continue to your dashboard</p>
+  <p class="login-sub">Choose Admin for administrators; Staff / Guest for all other roles.</p>
 
   <form id="loginForm" method="POST" action="<?= e(url('/login')) ?>" novalidate>
     <?= csrf_field() ?>
+    <input type="hidden" name="login_mode" id="loginMode" value="<?= e($loginMode) ?>">
 
     <div class="role-tabs">
-      <button type="button" class="role-tab active" id="tabAdmin" onclick="selectRole('admin')">
+      <button type="button" class="role-tab<?= $loginMode === 'admin' ? ' active' : '' ?>" id="tabAdmin" onclick="selectRole('admin')">
         <i class="bi bi-shield-check"></i> Admin
       </button>
-      <button type="button" class="role-tab" id="tabCashier" onclick="selectRole('staff')">
-        <i class="bi bi-person-badge"></i> Staff
+      <button type="button" class="role-tab<?= $loginMode === 'staff' ? ' active' : '' ?>" id="tabCashier" onclick="selectRole('staff')">
+        <i class="bi bi-person-badge"></i> Staff / Guest
       </button>
     </div>
 
@@ -307,8 +320,6 @@ unset($_SESSION['_old']['login']);
 
 <script src="<?= e(asset('vendor/sweetalert2/sweetalert2.all.min.js')) ?>"></script>
 <script>
-let selectedRole = 'admin';
-
 function swalToast(icon, text) {
   if (!window.Swal) { return false; }
   Swal.fire({
@@ -324,7 +335,7 @@ function swalToast(icon, text) {
 }
 
 function selectRole(role) {
-  selectedRole = role;
+  document.getElementById('loginMode').value = role;
   document.getElementById('tabAdmin').classList.toggle('active', role === 'admin');
   document.getElementById('tabCashier').classList.toggle('active', role === 'staff');
 }

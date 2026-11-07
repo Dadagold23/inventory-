@@ -15,6 +15,7 @@ defined('SALES_MODULE') || define('SALES_MODULE', 'sales');
 defined('APP_ROOT') || define('APP_ROOT', dirname(__DIR__));
 require_once APP_ROOT . '/config/database.php';
 require_once APP_ROOT . '/includes/helpers.php';
+require_once APP_ROOT . '/includes/auth_helpers.php';
 require_once APP_ROOT . '/includes/payment_methods_functions.php';
 require_once APP_ROOT . '/includes/inventory_functions.php';
 
@@ -56,6 +57,13 @@ if (!function_exists('salesSetting')) {
 if (!function_exists('salesUserId')) {
     function salesUserId(): int {
         return (int) ($_SESSION['user_id'] ?? 1);
+    }
+}
+
+if (!function_exists('salesCurrentScopeUserId')) {
+    function salesCurrentScopeUserId(): ?int
+    {
+        return function_exists('auth_sales_scope_user_id') ? auth_sales_scope_user_id() : null;
     }
 }
 
@@ -135,19 +143,33 @@ if (!function_exists('salesPaymentMethodOptions')) {
  * Get all customers for a company with payment and balance totals.
  */
 function getCustomersByCompany(PDO $pdo, int $companyId = 1): array {
+    $scopeUserId = salesCurrentScopeUserId();
+    $paymentJoin = '';
+    $paymentScope = '';
+    $invoiceScope = '';
+    $params = [$companyId];
+    if ($scopeUserId !== null) {
+        $paymentJoin = ' INNER JOIN sales_invoices si ON si.invoice_id = cp.invoice_id';
+        $paymentScope = ' AND si.created_by = ?';
+        $invoiceScope = ' AND si.created_by = ?';
+        $params[] = $scopeUserId;
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
         SELECT c.*,
                (SELECT COALESCE(SUM(cp.base_amount), 0)
-                  FROM customer_payments cp WHERE cp.customer_id = c.customer_id) AS total_paid,
+                 FROM customer_payments cp $paymentJoin
+                WHERE cp.customer_id = c.customer_id $paymentScope) AS total_paid,
                (SELECT COALESCE(SUM(si.base_amount_owed), 0)
                   FROM sales_invoices si
                  WHERE si.customer_id = c.customer_id
-                   AND si.status IN ('pending','partial')) AS outstanding
+                   AND si.status IN ('pending','partial') $invoiceScope) AS outstanding
         FROM customers c
         WHERE c.company_id = ?
         ORDER BY c.name
     ");
-    $stmt->execute([$companyId]);
+    $params = array_merge(array_slice($params, 1), [$companyId]);
+    $stmt->execute($params);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -291,18 +313,39 @@ function salesRecalcCustomerCredit(PDO $pdo, int $customerId): void {
  * Get customer outstanding balance summary.
  */
 function getCustomerBalance(PDO $pdo, int $customerId): array {
+    $scopeUserId = salesCurrentScopeUserId();
+    $quoteScope = $scopeUserId === null ? '' : ' AND created_by = ?';
+    $invoiceScope = $scopeUserId === null ? '' : ' AND created_by = ?';
+    $paymentJoin = $scopeUserId === null ? '' : ' INNER JOIN sales_invoices si ON si.invoice_id = customer_payments.invoice_id';
+    $paymentScope = $scopeUserId === null ? '' : ' AND si.created_by = ?';
+    $params = [$customerId];
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
+    $params[] = $customerId;
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
+    $params[] = $customerId;
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
+    $params[] = $customerId;
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
         SELECT
             (SELECT COALESCE(SUM(total_amount * COALESCE(NULLIF(exchange_rate, 0), 1)), 0) FROM quotes
-              WHERE customer_id = ? AND status IN ('sent','accepted')) AS quote_total,
+              WHERE customer_id = ? AND status IN ('sent','accepted') $quoteScope) AS quote_total,
             (SELECT COALESCE(SUM(base_total_amount), 0) FROM sales_invoices
-              WHERE customer_id = ? AND status IN ('pending','partial')) AS sale_total,
-            (SELECT COALESCE(SUM(base_amount), 0) FROM customer_payments
-              WHERE customer_id = ?) AS payments_received,
+              WHERE customer_id = ? AND status IN ('pending','partial') $invoiceScope) AS sale_total,
+            (SELECT COALESCE(SUM(customer_payments.base_amount), 0) FROM customer_payments $paymentJoin
+              WHERE customer_payments.customer_id = ? $paymentScope) AS payments_received,
             (SELECT COALESCE(SUM(base_amount_owed), 0) FROM sales_invoices
-              WHERE customer_id = ? AND status IN ('pending','partial')) AS amount_owed
+              WHERE customer_id = ? AND status IN ('pending','partial') $invoiceScope) AS amount_owed
     ");
-    $stmt->execute([$customerId, $customerId, $customerId, $customerId]);
+    $stmt->execute($params);
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     $row['net_balance'] = (float) ($row['amount_owed'] ?? 0);
     return $row;
@@ -667,8 +710,17 @@ function convertQuoteToSale(PDO $pdo, int $quoteId): bool {
  * Get sales invoices for a company.
  */
 function getSalesByCompany(PDO $pdo, int $companyId = 1, ?string $status = null): array {
-    $cond = $status !== null ? "AND si.status = ?" : "";
-    $params = $status !== null ? [$companyId, $status] : [$companyId];
+    $where = ['si.company_id = ?'];
+    $params = [$companyId];
+    if ($status !== null) {
+        $where[] = 'si.status = ?';
+        $params[] = $status;
+    }
+    $scopeUserId = salesCurrentScopeUserId();
+    if ($scopeUserId !== null) {
+        $where[] = 'si.created_by = ?';
+        $params[] = $scopeUserId;
+    }
 
     $stmt = $pdo->prepare("
         SELECT si.*, c.name AS customer_name, c.email AS customer_email,
@@ -678,7 +730,7 @@ function getSalesByCompany(PDO $pdo, int $companyId = 1, ?string $status = null)
         LEFT JOIN customers c ON si.customer_id = c.customer_id
         LEFT JOIN branches b ON si.branch_id = b.branch_id
         LEFT JOIN users u ON si.created_by = u.user_id
-        WHERE si.company_id = ? $cond
+        WHERE " . implode(' AND ', $where) . "
         ORDER BY si.issue_date DESC, si.invoice_id DESC
     ");
     $stmt->execute($params);
@@ -689,6 +741,13 @@ function getSalesByCompany(PDO $pdo, int $companyId = 1, ?string $status = null)
  * Get a specific sales invoice.
  */
 function getSaleById(PDO $pdo, int $saleId): ?array {
+    $scopeUserId = salesCurrentScopeUserId();
+    $where = 'si.invoice_id = ? AND si.company_id = ?';
+    $params = [$saleId, salesCompanyId()];
+    if ($scopeUserId !== null) {
+        $where .= ' AND si.created_by = ?';
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
         SELECT si.*, c.name AS customer_name, c.email AS customer_email,
                c.currency AS customer_currency, c.country AS customer_country,
@@ -697,9 +756,9 @@ function getSaleById(PDO $pdo, int $saleId): ?array {
         LEFT JOIN customers c ON si.customer_id = c.customer_id
         LEFT JOIN branches b ON si.branch_id = b.branch_id
         LEFT JOIN users u ON si.created_by = u.user_id
-        WHERE si.invoice_id = ?
+        WHERE $where
     ");
-    $stmt->execute([$saleId]);
+    $stmt->execute($params);
     $sale = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$sale) {
         return null;
@@ -1250,15 +1309,22 @@ function recordPayment(PDO $pdo, int $customerId, ?int $saleId, float $amount, s
         return false;
     }
 
+    $where = 'invoice_id = ? AND company_id = ?';
+    $params = [$saleId, salesCompanyId()];
+    $scopeUserId = salesCurrentScopeUserId();
+    if ($scopeUserId !== null) {
+        $where .= ' AND created_by = ?';
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
         SELECT invoice_id, company_id, customer_id, total_amount, amount_paid, status,
                currency, exchange_rate
-        FROM sales_invoices WHERE invoice_id = ? FOR UPDATE
+        FROM sales_invoices WHERE $where FOR UPDATE
     ");
 
     $pdo->beginTransaction();
     try {
-        $stmt->execute([$saleId]);
+        $stmt->execute($params);
         $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$invoice || (int) $invoice['customer_id'] !== $customerId || $invoice['status'] === 'cancelled') {
             $pdo->rollBack();
@@ -1293,6 +1359,19 @@ function recordPayment(PDO $pdo, int $customerId, ?int $saleId, float $amount, s
  * Cancel a sale, restore stock and prevent double processing.
  */
 function updateSaleStatus(PDO $pdo, int $saleId, string $status): bool {
+    $scopeUserId = salesCurrentScopeUserId();
+    $visibilitySql = 'SELECT COUNT(*) FROM sales_invoices WHERE invoice_id = ? AND company_id = ?';
+    $visibilityParams = [$saleId, salesCompanyId()];
+    if ($scopeUserId !== null) {
+        $visibilitySql .= ' AND created_by = ?';
+        $visibilityParams[] = $scopeUserId;
+    }
+    $visibilityCheck = $pdo->prepare($visibilitySql);
+    $visibilityCheck->execute($visibilityParams);
+    if ((int) $visibilityCheck->fetchColumn() !== 1) {
+        return false;
+    }
+
     if ($status !== 'cancelled') {
         $stmt = $pdo->prepare(
             "UPDATE sales_invoices SET status = ?, updated_at = NOW() WHERE invoice_id = ?"

@@ -154,6 +154,18 @@ html.loader-hold #loader { animation: none; }
     transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 .side-link i { font-size: 15px; width: 18px; text-align: center; color: var(--text-3); transition: color 0.2s; }
+.side-link-image-placeholder {
+    width: 30px; height: 30px; flex: 0 0 30px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-2); border-radius: 8px;
+    background: var(--dark-4);
+}
+.side-link .side-link-image-placeholder i { width: auto; color: var(--text-2); }
+.side-link:hover .side-link-image-placeholder { background: var(--dark-5); }
+.side-link.active .side-link-image-placeholder {
+    background: var(--lime-dim); border-color: var(--border-lime);
+}
+.side-link.active .side-link-image-placeholder i { color: var(--lime); }
 .side-link:hover { background: rgba(255, 255, 255, 0.035); color: var(--text); }
 .side-link:hover i { color: var(--text-2); }
 .side-link.active {

@@ -61,7 +61,14 @@ $navSections = [
             <?php $navCurrent = $navActive === $navItem[0]; ?>
             <a class="side-link<?php echo $navCurrent ? ' active' : ''; ?>"
                href="<?php echo e(url($navItem[1])); ?>"<?php echo $navCurrent ? ' aria-current="page"' : ''; ?>>
-                <i class="bi <?php echo e($navItem[2]); ?>"></i><span><?php echo e($navItem[3]); ?></span></a>
+                <?php if ($navItem[0] === 'shifts'): ?>
+                    <span class="side-link-image-placeholder" role="img" aria-label="Shifts and drawer placeholder">
+                        <i class="bi <?php echo e($navItem[2]); ?>" aria-hidden="true"></i>
+                    </span>
+                <?php else: ?>
+                    <i class="bi <?php echo e($navItem[2]); ?>"></i>
+                <?php endif; ?>
+                <span><?php echo e($navItem[3]); ?></span></a>
         <?php endforeach; ?>
     <?php endforeach; ?>
 </nav>

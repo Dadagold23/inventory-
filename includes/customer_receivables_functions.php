@@ -15,6 +15,7 @@ defined('CUSTOMER_MODULE') || define('CUSTOMER_MODULE', 'customer');
 defined('APP_ROOT') || define('APP_ROOT', dirname(__DIR__));
 require_once APP_ROOT . '/config/database.php';
 require_once APP_ROOT . '/includes/helpers.php';
+require_once APP_ROOT . '/includes/auth_helpers.php';
 
 // ============================================================
 // Internal helpers
@@ -29,6 +30,14 @@ if (!function_exists('receivablesCompanyId')) {
             }
         }
         return 1;
+    }
+}
+
+if (!function_exists('receivablesSalesScope')) {
+    function receivablesSalesScope(): array
+    {
+        $userId = auth_sales_scope_user_id();
+        return $userId === null ? ['', []] : [' AND si.created_by = ?', [$userId]];
     }
 }
 
@@ -55,6 +64,7 @@ if (!function_exists('receivablesCustomerInCompany')) {
  * Inactive customers are included; the view decides how to present them.
  */
 function getCustomersByCompanyWithCredit(PDO $pdo, int $companyId = 1): array {
+    [$scopeSql, $scopeParams] = receivablesSalesScope();
     $stmt = $pdo->prepare("
         SELECT c.*,
                COALESCE(open_invoices.outstanding, 0) AS outstanding,
@@ -74,24 +84,34 @@ function getCustomersByCompanyWithCredit(PDO $pdo, int $companyId = 1): array {
                    MIN(CASE WHEN si.due_date IS NOT NULL AND si.due_date < CURDATE()
                             THEN si.due_date END) AS oldest_due_date
             FROM sales_invoices si
-            WHERE si.company_id = ? AND si.status IN ('pending', 'partial')
+            WHERE si.company_id = ? AND si.status IN ('pending', 'partial') $scopeSql
             GROUP BY si.customer_id
         ) open_invoices ON open_invoices.customer_id = c.customer_id
         LEFT JOIN (
             SELECT cp.customer_id, SUM(cp.base_amount) AS total_paid, COUNT(*) AS payment_count
             FROM customer_payments cp
+            INNER JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
+            WHERE si.company_id = ? $scopeSql
             GROUP BY cp.customer_id
         ) paid ON paid.customer_id = c.customer_id
         LEFT JOIN (
             SELECT si.customer_id, MAX(si.issue_date) AS last_invoice_date
             FROM sales_invoices si
-            WHERE si.company_id = ? AND si.status <> 'cancelled'
+            WHERE si.company_id = ? AND si.status <> 'cancelled' $scopeSql
             GROUP BY si.customer_id
         ) last_sale ON last_sale.customer_id = c.customer_id
         WHERE c.company_id = ?
         ORDER BY c.payment_status, c.name
     ");
-    $stmt->execute([$companyId, $companyId, $companyId]);
+    $stmt->execute(array_merge(
+        [$companyId],
+        $scopeParams,
+        [$companyId],
+        $scopeParams,
+        [$companyId],
+        $scopeParams,
+        [$companyId]
+    ));
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -99,6 +119,7 @@ function getCustomersByCompanyWithCredit(PDO $pdo, int $companyId = 1): array {
  * Get a single customer with aging figures.
  */
 function getCustomerAging(PDO $pdo, int $customerId): array {
+    [$scopeSql, $scopeParams] = receivablesSalesScope();
     $stmt = $pdo->prepare("
         SELECT c.*,
                COALESCE(open_invoices.outstanding, 0) AS outstanding,
@@ -118,23 +139,25 @@ function getCustomerAging(PDO $pdo, int $customerId): array {
                    MIN(CASE WHEN si.due_date IS NOT NULL AND si.due_date < CURDATE()
                             THEN si.due_date END) AS oldest_due_date
             FROM sales_invoices si
-            WHERE si.status IN ('pending', 'partial')
+            WHERE si.status IN ('pending', 'partial') $scopeSql
             GROUP BY si.customer_id
         ) open_invoices ON open_invoices.customer_id = c.customer_id
         LEFT JOIN (
             SELECT cp.customer_id, SUM(cp.base_amount) AS total_paid, COUNT(*) AS payment_count
             FROM customer_payments cp
+            INNER JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
+            WHERE 1 = 1 $scopeSql
             GROUP BY cp.customer_id
         ) paid ON paid.customer_id = c.customer_id
         LEFT JOIN (
             SELECT si.customer_id, MAX(si.issue_date) AS last_invoice_date
             FROM sales_invoices si
-            WHERE si.status <> 'cancelled'
+            WHERE si.status <> 'cancelled' $scopeSql
             GROUP BY si.customer_id
         ) last_sale ON last_sale.customer_id = c.customer_id
         WHERE c.customer_id = ?
     ");
-    $stmt->execute([$customerId]);
+    $stmt->execute(array_merge($scopeParams, $scopeParams, $scopeParams, [$customerId]));
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 }
 
@@ -213,14 +236,15 @@ function getOverdueCustomers(PDO $pdo, int $companyId = 1): array {
  * Open invoices for a customer with balance and days overdue.
  */
 function getCustomerInvoices(PDO $pdo, int $customerId): array {
+    [$scopeSql, $scopeParams] = receivablesSalesScope();
     $stmt = $pdo->prepare("
         SELECT si.*,
                GREATEST(0, DATEDIFF(CURDATE(), si.due_date)) AS days_overdue
         FROM sales_invoices si
-        WHERE si.customer_id = ? AND si.status <> 'cancelled'
+        WHERE si.customer_id = ? AND si.company_id = ? AND si.status <> 'cancelled' $scopeSql
         ORDER BY si.issue_date DESC, si.invoice_id DESC
     ");
-    $stmt->execute([$customerId]);
+    $stmt->execute(array_merge([$customerId, receivablesCompanyId()], $scopeParams));
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -228,14 +252,15 @@ function getCustomerInvoices(PDO $pdo, int $customerId): array {
  * Payment history for a customer.
  */
 function getCustomerPayments(PDO $pdo, int $customerId): array {
+    [$scopeSql, $scopeParams] = receivablesSalesScope();
     $stmt = $pdo->prepare("
         SELECT cp.*, si.invoice_number
         FROM customer_payments cp
-        LEFT JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
-        WHERE cp.customer_id = ?
+        INNER JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
+        WHERE cp.customer_id = ? AND cp.company_id = ? $scopeSql
         ORDER BY cp.payment_date DESC, cp.payment_id DESC
     ");
-    $stmt->execute([$customerId]);
+    $stmt->execute(array_merge([$customerId, receivablesCompanyId()], $scopeParams));
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -303,14 +328,15 @@ function createCustomerStatement(PDO $pdo, int $companyId, int $customerId, stri
         return 0;
     }
 
+    [$scopeSql, $scopeParams] = receivablesSalesScope();
     $invoiceStmt = $pdo->prepare("
         SELECT COALESCE(SUM(CASE WHEN si.issue_date < ? THEN si.base_total_amount ELSE 0 END), 0) AS opening_sales,
                COALESCE(SUM(CASE WHEN si.issue_date BETWEEN ? AND ? THEN si.base_total_amount ELSE 0 END), 0) AS period_sales
         FROM sales_invoices si
         WHERE si.customer_id = ? AND si.company_id = ?
-          AND si.status IN ('pending', 'partial', 'paid')
+          AND si.status IN ('pending', 'partial', 'paid') $scopeSql
     ");
-    $invoiceStmt->execute([$start, $start, $end, $customerId, $companyId]);
+    $invoiceStmt->execute(array_merge([$start, $start, $end, $customerId, $companyId], $scopeParams));
     $invoiceTotals = $invoiceStmt->fetch(PDO::FETCH_ASSOC) ?: ['opening_sales' => 0, 'period_sales' => 0];
 
     $paymentStmt = $pdo->prepare("
@@ -319,9 +345,9 @@ function createCustomerStatement(PDO $pdo, int $companyId, int $customerId, stri
         FROM customer_payments cp
         INNER JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
         WHERE cp.customer_id = ? AND cp.company_id = ?
-          AND si.status <> 'cancelled'
+          AND si.status <> 'cancelled' $scopeSql
     ");
-    $paymentStmt->execute([$start, $start, $end, $customerId, $companyId]);
+    $paymentStmt->execute(array_merge([$start, $start, $end, $customerId, $companyId], $scopeParams));
     $paymentTotals = $paymentStmt->fetch(PDO::FETCH_ASSOC) ?: ['opening_payments' => 0, 'period_payments' => 0];
 
     $openingBalance = receivablesRound((float) $invoiceTotals['opening_sales'] - (float) $paymentTotals['opening_payments']);
@@ -354,13 +380,19 @@ function createCustomerStatement(PDO $pdo, int $companyId, int $customerId, stri
  * Get a single statement with its customer.
  */
 function getCustomerStatement(PDO $pdo, int $statementId): ?array {
+    $scopeUserId = auth_sales_scope_user_id();
+    $scopeSql = $scopeUserId === null ? '' : ' AND cs.created_by = ?';
+    $params = [$statementId];
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
         SELECT cs.*, c.name AS customer_name, c.email AS customer_email
         FROM customer_statements cs
         LEFT JOIN customers c ON cs.customer_id = c.customer_id
-        WHERE cs.statement_id = ?
+        WHERE cs.statement_id = ? $scopeSql
     ");
-    $stmt->execute([$statementId]);
+    $stmt->execute($params);
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
 
@@ -368,14 +400,20 @@ function getCustomerStatement(PDO $pdo, int $statementId): ?array {
  * Get all statements for a customer.
  */
 function getStatementsByCustomer(PDO $pdo, int $customerId): array {
+    $scopeUserId = auth_sales_scope_user_id();
+    $scopeSql = $scopeUserId === null ? '' : ' AND cs.created_by = ?';
+    $params = [$customerId];
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
         SELECT cs.*, c.name AS customer_name
         FROM customer_statements cs
         LEFT JOIN customers c ON cs.customer_id = c.customer_id
-        WHERE cs.customer_id = ?
+        WHERE cs.customer_id = ? $scopeSql
         ORDER BY cs.statement_date DESC, cs.statement_id DESC
     ");
-    $stmt->execute([$customerId]);
+    $stmt->execute($params);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -386,8 +424,15 @@ function updateStatementStatus(PDO $pdo, int $statementId, string $status): bool
     if (!in_array($status, ['draft', 'sent'], true)) {
         return false;
     }
-    $stmt = $pdo->prepare("UPDATE customer_statements SET status = ? WHERE statement_id = ?");
-    return $stmt->execute([$status, $statementId]);
+    $scopeUserId = auth_sales_scope_user_id();
+    $sql = 'UPDATE customer_statements SET status = ? WHERE statement_id = ?';
+    $params = [$status, $statementId];
+    if ($scopeUserId !== null) {
+        $sql .= ' AND created_by = ?';
+        $params[] = $scopeUserId;
+    }
+    $stmt = $pdo->prepare($sql);
+    return $stmt->execute($params);
 }
 
 // ============================================================

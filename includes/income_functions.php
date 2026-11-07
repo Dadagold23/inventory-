@@ -11,6 +11,7 @@ defined('INCOME_MODULE') || define('INCOME_MODULE', 'income');
 // Require foundation
 defined('APP_ROOT') || define('APP_ROOT', dirname(__DIR__));
 require_once APP_ROOT . '/config/database.php';
+require_once APP_ROOT . '/includes/auth_helpers.php';
 
 if (!function_exists('incomeCompanyId')) {
     function incomeCompanyId(): int
@@ -124,7 +125,15 @@ function deleteIncomeSource(PDO $pdo, int $sourceId): bool
 function getIncomeTransactionsByCompany(PDO $pdo, int $companyId = 1, ?string $status = null): array
 {
     $cond = $status ? 'AND ir.payment_status = ?' : '';
-    $params = $status ? [$status] : [];
+    $params = [$companyId];
+    if ($status) {
+        $params[] = $status;
+    }
+    $scopeUserId = auth_sales_scope_user_id();
+    $saleScope = $scopeUserId === null ? '' : ' AND (ir.sales_invoice_id IS NULL OR si.created_by = ?)';
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
 
     $stmt = $pdo->prepare("
         SELECT ir.*, s.name AS source_name, c.name AS customer_name,
@@ -134,16 +143,22 @@ function getIncomeTransactionsByCompany(PDO $pdo, int $companyId = 1, ?string $s
         LEFT JOIN customers c ON ir.customer_id = c.customer_id
         LEFT JOIN sales_invoices si ON ir.sales_invoice_id = si.invoice_id
         LEFT JOIN branches b ON ir.branch_id = b.branch_id
-        WHERE ir.company_id = ? $cond
+        WHERE ir.company_id = ? $cond $saleScope
         ORDER BY ir.income_date DESC, ir.income_id DESC
     ");
-    array_unshift($params, $companyId);
     $stmt->execute($params);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function getIncomeTransactionById(PDO $pdo, int $transactionId): ?array
 {
+    $companyId = function_exists('auth_company_id') ? auth_company_id() : 1;
+    $scopeUserId = auth_sales_scope_user_id();
+    $saleScope = $scopeUserId === null ? '' : ' AND (ir.sales_invoice_id IS NULL OR si.created_by = ?)';
+    $params = [$transactionId, $companyId];
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare("
         SELECT ir.*, s.name AS source_name, c.name AS customer_name,
                si.invoice_number, b.name AS branch_name
@@ -152,9 +167,9 @@ function getIncomeTransactionById(PDO $pdo, int $transactionId): ?array
         LEFT JOIN customers c ON ir.customer_id = c.customer_id
         LEFT JOIN sales_invoices si ON ir.sales_invoice_id = si.invoice_id
         LEFT JOIN branches b ON ir.branch_id = b.branch_id
-        WHERE ir.income_id = ?
+        WHERE ir.income_id = ? AND ir.company_id = ? $saleScope
     ");
-    $stmt->execute([$transactionId]);
+    $stmt->execute($params);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return $row ?: null;
 }
@@ -167,10 +182,25 @@ function createIncomeTransaction(PDO $pdo, array $transactionData): int
 {
     $companyId = (int) ($transactionData['company_id'] ?? incomeCompanyId());
     $sourceId = (int) ($transactionData['income_source_id'] ?? $transactionData['source_id'] ?? 0);
+    $salesInvoiceId = (int) ($transactionData['sales_invoice_id'] ?? 0);
 
     $source = $sourceId > 0 ? getIncomeSourceById($pdo, $sourceId) : null;
     if (!$source || (int) $source['company_id'] !== $companyId) {
         return 0;
+    }
+    if ($salesInvoiceId > 0) {
+        $sql = 'SELECT COUNT(*) FROM sales_invoices WHERE invoice_id = ? AND company_id = ?';
+        $params = [$salesInvoiceId, $companyId];
+        $scopeUserId = auth_sales_scope_user_id();
+        if ($scopeUserId !== null) {
+            $sql .= ' AND created_by = ?';
+            $params[] = $scopeUserId;
+        }
+        $invoiceCheck = $pdo->prepare($sql);
+        $invoiceCheck->execute($params);
+        if ((int) $invoiceCheck->fetchColumn() !== 1) {
+            return 0;
+        }
     }
 
     $gross = (float) ($transactionData['gross_amount'] ?? 0);

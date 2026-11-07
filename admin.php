@@ -65,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             'role' => $_POST['role'] ?? 'staff',
             'password' => (string) ($_POST['password'] ?? ''),
             'branch_id' => (int) ($_POST['branch_id'] ?? 0),
+            'department_id' => (int) ($_POST['department_id'] ?? 0),
             'branch_access' => (array) ($_POST['branch_access'] ?? []),
             'permissions' => (array) ($_POST['permissions'] ?? []),
         ]);
@@ -80,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             'full_name' => $_POST['full_name'] ?? '',
             'role' => $_POST['role'] ?? ($existing['role'] ?? 'staff'),
             'branch_id' => (int) ($_POST['branch_id'] ?? 0),
+            'department_id' => (int) ($_POST['department_id'] ?? 0),
             'is_active' => !empty($_POST['is_active']),
             'branch_access' => (array) ($_POST['branch_access'] ?? []),
             'permissions' => array_key_exists('permissions', $_POST) ? (array) $_POST['permissions'] : (array) ($_POST['existing_permissions'] ?? []),
@@ -168,6 +170,7 @@ $users = adminListUsers($pdo, $companyId);
 $roles = getAllRoles($pdo, false);
 $allPermissions = adminListPermissions($pdo);
 $branchOptions = adminListBranches($pdo, $companyId);
+$departmentOptions = getAllDepartments($pdo, $companyId);
 
 $editUserId = (int) ($_GET['edit'] ?? 0);
 $editUser = $editUserId > 0 ? adminGetUser($pdo, $editUserId, $companyId) : null;

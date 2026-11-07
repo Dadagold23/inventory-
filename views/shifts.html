@@ -104,6 +104,81 @@ require APP_ROOT . '/views/layout/header.php';
                 </div>
             </div>
 
+            <?php if ($canOpenForStaff): ?>
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header fw-semibold"><i class="bi bi-person-workspace me-2"></i>Open a staff shift</div>
+                <div class="card-body">
+                    <?php if ($departments === [] || $staffOptions === []): ?>
+                    <p class="text-muted mb-0">Create an active department and assign staff to it in Users &amp; Roles before opening a department shift.</p>
+                    <?php else: ?>
+                    <form method="POST" action="<?php echo e(url('/shifts')); ?>" class="row g-2 align-items-end">
+                        <?php echo csrf_field(); ?>
+                        <input type="hidden" name="action" value="open_for_staff">
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="staff_shift_department">Department</label>
+                            <select class="form-select" name="department_id" id="staff_shift_department" required>
+                                <option value="">Select department</option>
+                                <?php foreach ($departments as $department): ?>
+                                <option value="<?php echo (int) $department['department_id']; ?>">
+                                    <?php echo e($department['name']); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="staff_shift_user">Staff member</label>
+                            <select class="form-select" name="target_user_id" id="staff_shift_user" required>
+                                <option value="">Select staff member</option>
+                                <?php foreach ($staffOptions as $staff): ?>
+                                <option value="<?php echo (int) $staff['user_id']; ?>"
+                                        data-department-id="<?php echo (int) $staff['department_id']; ?>">
+                                    <?php echo e($staff['full_name'] ?: $staff['username']); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label" for="staff_opening_float">Opening float</label>
+                            <input class="form-control" type="number" step="1" min="0" name="opening_float"
+                                   id="staff_opening_float" value="0" required>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label" for="staff_opening_note">Note</label>
+                            <input class="form-control" type="text" name="opening_note" id="staff_opening_note"
+                                   maxlength="255" placeholder="Optional">
+                        </div>
+                        <div class="col-12 col-md-1">
+                            <button class="btn btn-success w-100" type="submit" title="Open staff shift" aria-label="Open staff shift">
+                                <i class="bi bi-unlock" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </form>
+                    <script>
+                    (() => {
+                        const department = document.getElementById('staff_shift_department');
+                        const staff = document.getElementById('staff_shift_user');
+                        const filterStaff = () => {
+                            let firstVisible = '';
+                            Array.from(staff.options).forEach((option) => {
+                                const visible = option.value === '' || option.dataset.departmentId === department.value;
+                                option.hidden = !visible;
+                                if (visible && option.value !== '' && firstVisible === '') {
+                                    firstVisible = option.value;
+                                }
+                            });
+                            if (staff.selectedOptions.length && staff.selectedOptions[0].hidden) {
+                                staff.value = firstVisible;
+                            }
+                        };
+                        department.addEventListener('change', filterStaff);
+                        filterStaff();
+                    })();
+                    </script>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- ================= Shift detail ================= -->
             <?php if ($shift): ?>
             <?php $canMove = $shift['status'] === 'open' && can('shifts', 'update'); ?>
@@ -123,6 +198,9 @@ require APP_ROOT . '/views/layout/header.php';
                         <span>
                         Shift #<?php echo (int) $shift['shift_id']; ?> — <?php echo e($shiftCashierName !== '' ? $shiftCashierName : 'Cashier'); ?>
                         <span class="text-muted">at <?php echo e($shift['branch_name'] ?? 'no branch'); ?></span>
+                        <?php if (!empty($shift['creator_name'])): ?>
+                        <small class="d-block text-muted">Opened by <?php echo e($shift['creator_name']); ?></small>
+                        <?php endif; ?>
                         </span>
                     </span>
                     <span class="d-flex gap-2 align-items-center">

@@ -327,6 +327,37 @@ if (!function_exists('verifyCsrfToken')) {
     }
 }
 
+if (!function_exists('auth_can_view_cross_user_records')) {
+    function auth_can_view_cross_user_records(): bool
+    {
+        $user = auth_user();
+        return $user !== null
+            && in_array(strtolower((string) ($user['role'] ?? '')), ['admin', 'manager', 'auditor'], true);
+    }
+}
+
+if (!function_exists('auth_sales_scope_user_id')) {
+    function auth_sales_scope_user_id(): ?int
+    {
+        $user = auth_user();
+        if ($user === null || auth_can_view_cross_user_records()) {
+            return null;
+        }
+
+        $userId = (int) ($user['user_id'] ?? 0);
+        return $userId > 0 ? $userId : null;
+    }
+}
+
+if (!function_exists('auth_can_view_company_sales_dashboard')) {
+    function auth_can_view_company_sales_dashboard(): bool
+    {
+        $user = auth_user();
+        return $user !== null
+            && in_array(strtolower((string) ($user['role'] ?? '')), ['admin', 'auditor'], true);
+    }
+}
+
 if (!function_exists('getCurrentUser')) {
     function getCurrentUser(): array
     {

@@ -116,7 +116,16 @@ if (!function_exists('shiftOpen')) {
      *
      * @return array{success:bool, shift_id:int, message:string}
      */
-    function shiftOpen(PDO $pdo, int $userId, int $companyId, int $branchId, float $openingFloat, string $note = ''): array
+    function shiftOpen(
+        PDO $pdo,
+        int $userId,
+        int $companyId,
+        int $branchId,
+        float $openingFloat,
+        string $note = '',
+        ?int $createdById = null,
+        ?int $departmentId = null
+    ): array
     {
         if (!shiftTableReady($pdo)) {
             return ['success' => false, 'shift_id' => 0, 'message' => 'Shift tables are not installed. Run migrations.'];
@@ -126,6 +135,40 @@ if (!function_exists('shiftOpen')) {
         }
         if ($userId <= 0) {
             return ['success' => false, 'shift_id' => 0, 'message' => 'A shift needs a signed-in cashier.'];
+        }
+
+        $sessionUserId = (int) (auth_user()['user_id'] ?? 0);
+        $actorId = $createdById ?? ($sessionUserId > 0 ? $sessionUserId : $userId);
+        if ($createdById !== null && $createdById !== $sessionUserId) {
+            return ['success' => false, 'shift_id' => 0, 'message' => 'The shift creator must be the signed-in user.'];
+        }
+        if ($userId !== $actorId) {
+            $actor = auth_user();
+            if (($actor['role'] ?? '') !== 'admin' || $departmentId === null || $departmentId <= 0) {
+                return ['success' => false, 'shift_id' => 0, 'message' => 'Only an administrator can open a department shift for another user.'];
+            }
+
+            $target = $pdo->prepare(
+                "SELECT COUNT(*)
+                 FROM users u
+                 INNER JOIN departments d ON d.department_id = u.department_id
+                 WHERE u.user_id = ? AND u.company_id = ? AND u.is_active = 1
+                   AND u.role <> 'admin' AND u.department_id = ?
+                   AND d.company_id = u.company_id AND d.is_active = 1"
+            );
+            $target->execute([$userId, $companyId, $departmentId]);
+            if ((int) $target->fetchColumn() !== 1) {
+                return ['success' => false, 'shift_id' => 0, 'message' => 'The selected user is not assigned to that active department.'];
+            }
+        } elseif ($departmentId === null) {
+            $assignment = $pdo->prepare(
+                'SELECT department_id FROM users WHERE user_id = ? AND company_id = ?'
+            );
+            $assignment->execute([$userId, $companyId]);
+            $assignedDepartmentId = $assignment->fetchColumn();
+            $departmentId = $assignedDepartmentId === false || $assignedDepartmentId === null
+                ? null
+                : (int) $assignedDepartmentId;
         }
 
         $pdo->beginTransaction();
@@ -141,9 +184,18 @@ if (!function_exists('shiftOpen')) {
             }
 
             $pdo->prepare(
-                "INSERT INTO cashier_shifts (company_id, branch_id, user_id, status, opening_float, opening_note, opened_at)
-                 VALUES (?, ?, ?, 'open', ?, ?, NOW())"
-            )->execute([$companyId, $branchId, $userId, round($openingFloat, 4), $note !== '' ? $note : null]);
+                "INSERT INTO cashier_shifts
+                    (company_id, branch_id, user_id, department_id, created_by, status, opening_float, opening_note, opened_at)
+                 VALUES (?, ?, ?, ?, ?, 'open', ?, ?, NOW())"
+            )->execute([
+                $companyId,
+                $branchId,
+                $userId,
+                $departmentId,
+                $actorId,
+                round($openingFloat, 4),
+                $note !== '' ? $note : null,
+            ]);
 
             $shiftId = (int) $pdo->lastInsertId();
             // The float lives in cashier_shifts.opening_float, not in
@@ -159,7 +211,7 @@ if (!function_exists('shiftOpen')) {
         }
 
         auth_audit($pdo, 'CREATE', 'cashier_shifts', $shiftId,
-            'Opened shift with float ' . number_format($openingFloat, 2), $userId);
+            'Opened shift for cashier ' . $userId . ' with float ' . number_format($openingFloat, 2), $actorId);
 
         return ['success' => true, 'shift_id' => $shiftId, 'message' => 'Shift opened.'];
     }
@@ -172,14 +224,21 @@ if (!function_exists('shiftGet')) {
         if (!shiftTableReady($pdo) || $shiftId <= 0) {
             return null;
         }
-        $stmt = $pdo->prepare(
-            "SELECT s.*, u.full_name AS cashier_name, u.username AS cashier_username, b.name AS branch_name
+        $scope = auth_sales_scope_user_id();
+        $sql = "SELECT s.*, u.full_name AS cashier_name, u.username AS cashier_username,
+                       creator.full_name AS creator_name, b.name AS branch_name
              FROM cashier_shifts s
              LEFT JOIN users u ON u.user_id = s.user_id
+             LEFT JOIN users creator ON creator.user_id = s.created_by
              LEFT JOIN branches b ON b.branch_id = s.branch_id
-             WHERE s.shift_id = ? AND s.company_id = ?"
-        );
-        $stmt->execute([$shiftId, $companyId]);
+             WHERE s.shift_id = ? AND s.company_id = ?";
+        $params = [$shiftId, $companyId];
+        if ($scope !== null) {
+            $sql .= ' AND s.user_id = ?';
+            $params[] = $scope;
+        }
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row === false ? null : $row;
     }
@@ -342,7 +401,14 @@ if (!function_exists('shiftClose')) {
         }
 
         $actorId = (int) ($_SESSION['user_id'] ?? 0);
-        if (!$forceClose && (int) $shift['user_id'] !== $actorId && !userHasPermission($pdo, $actorId, 'shifts', 'delete')) {
+        $isOwner = (int) $shift['user_id'] === $actorId;
+        if (!$isOwner && !auth_can_view_cross_user_records()) {
+            return ['success' => false, 'message' => 'You cannot close another user’s shift.', 'totals' => []];
+        }
+        if ($forceClose && !userHasPermission($pdo, $actorId, 'shifts', 'delete')) {
+            return ['success' => false, 'message' => 'You do not have permission to force-close shifts.', 'totals' => []];
+        }
+        if (!$forceClose && !$isOwner && !userHasPermission($pdo, $actorId, 'shifts', 'delete')) {
             return ['success' => false, 'message' => 'Only the cashier who opened this shift (or a manager) can close it.', 'totals' => []];
         }
         if ($closingCount !== null && $closingCount < 0) {
@@ -427,6 +493,10 @@ if (!function_exists('shiftAddMovement')) {
         if ($shift['status'] !== 'open') {
             return ['success' => false, 'message' => 'Movements can only be recorded on an open shift.'];
         }
+        if ((int) $shift['user_id'] !== (int) ($_SESSION['user_id'] ?? 0)
+            && !auth_can_view_cross_user_records()) {
+            return ['success' => false, 'message' => 'You cannot record movements on another user’s shift.'];
+        }
 
         if ($invoiceId !== null) {
             $stmt = $pdo->prepare("SELECT company_id FROM sales_invoices WHERE invoice_id = ?");
@@ -467,6 +537,10 @@ if (!function_exists('shiftVoidIfEmpty')) {
         if (!$shift) {
             return ['success' => false, 'message' => 'Shift not found.'];
         }
+        if ((int) $shift['user_id'] !== (int) ($_SESSION['user_id'] ?? 0)
+            && !auth_can_view_cross_user_records()) {
+            return ['success' => false, 'message' => 'You cannot void another user’s shift.'];
+        }
 
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM sales_invoices WHERE shift_id = ?");
         $stmt->execute([$shiftId]);
@@ -500,6 +574,11 @@ if (!function_exists('shiftList')) {
 
         $where = ['s.company_id = ?'];
         $args = [$companyId];
+        $userScope = auth_sales_scope_user_id();
+        if ($userScope !== null) {
+            $where[] = 's.user_id = ?';
+            $args[] = $userScope;
+        }
 
         if (($filters['status'] ?? '') === 'open' || ($filters['status'] ?? '') === 'closed') {
             $where[] = 's.status = ?';
@@ -529,9 +608,11 @@ if (!function_exists('shiftList')) {
         }
 
         $stmt = $pdo->prepare(
-            'SELECT s.*, u.full_name AS cashier_name, u.username AS cashier_username, b.name AS branch_name
+            'SELECT s.*, u.full_name AS cashier_name, u.username AS cashier_username,
+                    creator.full_name AS creator_name, b.name AS branch_name
              FROM cashier_shifts s
              LEFT JOIN users u ON u.user_id = s.user_id
+             LEFT JOIN users creator ON creator.user_id = s.created_by
              LEFT JOIN branches b ON b.branch_id = s.branch_id
              WHERE ' . implode(' AND ', $where) . '
              ORDER BY s.opened_at DESC LIMIT ' . max(1, min(1000, $limit))

@@ -42,6 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('/payment_received?action=list');
         }
 
+        $invoiceScopeUserId = auth_sales_scope_user_id();
+        $invoiceScopeSql = $invoiceScopeUserId === null ? '' : ' AND si.created_by = ?';
+        $invoiceParams = [$invoiceId];
+        if ($invoiceScopeUserId !== null) {
+            $invoiceParams[] = $invoiceScopeUserId;
+        }
         $invoiceStmt = $pdo->prepare(
             "SELECT si.invoice_id, si.company_id, si.customer_id, si.total_amount, si.currency, si.status,
                     c.currency AS customer_currency, c.country AS customer_country,
@@ -49,9 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                WHERE cp.invoice_id = si.invoice_id), 0) AS paid
              FROM sales_invoices si
              LEFT JOIN customers c ON c.customer_id = si.customer_id
-             WHERE si.invoice_id = ?"
+             WHERE si.invoice_id = ? $invoiceScopeSql"
         );
-        $invoiceStmt->execute([$invoiceId]);
+        $invoiceStmt->execute($invoiceParams);
         $invoice = $invoiceStmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$invoice
@@ -105,14 +111,29 @@ $payments = getPaymentsReceivedByCompany($pdo, $companyId);
 $outstanding = getOutstandingReceivables($pdo, $companyId);
 $paymentSummary = getPaymentSummaryByMethod($pdo, $companyId);
 
+$customerScopeUserId = auth_sales_scope_user_id();
+$customerScopeSql = $customerScopeUserId === null
+    ? ''
+    : ' AND EXISTS (SELECT 1 FROM sales_invoices si WHERE si.customer_id = customers.customer_id
+                    AND si.company_id = ? AND si.created_by = ?)';
+$customerParams = [$companyId];
+if ($customerScopeUserId !== null) {
+    $customerParams[] = $companyId;
+    $customerParams[] = $customerScopeUserId;
+}
 $customerStmt = $pdo->prepare(
     'SELECT customer_id, name FROM customers
-     WHERE company_id = ? AND is_active = 1
+     WHERE company_id = ? AND is_active = 1' . $customerScopeSql . '
      ORDER BY name'
 );
-$customerStmt->execute([$companyId]);
+$customerStmt->execute($customerParams);
 $customers = $customerStmt->fetchAll(PDO::FETCH_ASSOC);
 
+$invoiceScopeSql = $customerScopeUserId === null ? '' : ' AND si.created_by = ?';
+$invoiceParams = [$companyId];
+if ($customerScopeUserId !== null) {
+    $invoiceParams[] = $customerScopeUserId;
+}
 $invoiceStmt = $pdo->prepare(
     "SELECT si.invoice_id, si.invoice_number, si.customer_id, si.total_amount, si.currency,
             c.name AS customer_name,
@@ -120,11 +141,11 @@ $invoiceStmt = $pdo->prepare(
                        WHERE cp.invoice_id = si.invoice_id), 0) AS paid
      FROM sales_invoices si
      INNER JOIN customers c ON si.customer_id = c.customer_id
-     WHERE si.company_id = ? AND si.status IN ('pending', 'partial')
+     WHERE si.company_id = ? AND si.status IN ('pending', 'partial') $invoiceScopeSql
      ORDER BY si.issue_date DESC, si.invoice_id DESC
      LIMIT 500"
 );
-$invoiceStmt->execute([$companyId]);
+$invoiceStmt->execute($invoiceParams);
 $invoices = $invoiceStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $totalReceived = array_sum(array_map(

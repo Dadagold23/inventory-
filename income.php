@@ -235,14 +235,20 @@ $customers = getCustomersByCompanyWithCredit($pdo, $companyId);
 $branches = getBranchesByCompany($pdo, $companyId);
 $defaultSourceId = getDefaultIncomeSource($pdo);
 
+$invoiceScopeUserId = auth_sales_scope_user_id();
+$invoiceScopeSql = $invoiceScopeUserId === null ? '' : ' AND created_by = ?';
+$invoiceParams = [$companyId];
+if ($invoiceScopeUserId !== null) {
+    $invoiceParams[] = $invoiceScopeUserId;
+}
 $invoiceStmt = $pdo->prepare("
     SELECT invoice_id, invoice_number, total_amount, customer_id, status
     FROM sales_invoices
-    WHERE company_id = ? AND status <> 'cancelled'
+    WHERE company_id = ? AND status <> 'cancelled' $invoiceScopeSql
     ORDER BY issue_date DESC, invoice_id DESC
     LIMIT 200
 ");
-$invoiceStmt->execute([$companyId]);
+$invoiceStmt->execute($invoiceParams);
 $invoices = $invoiceStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $totalIncome = array_sum(array_map(

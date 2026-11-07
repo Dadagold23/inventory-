@@ -8,7 +8,7 @@ if (!defined('APP_ROOT')) {
 }
 
 defined('APP_NAME') || define('APP_NAME', 'Inventory Management System');
-defined('APP_VERSION') || define('APP_VERSION', '2.0.1');
+defined('APP_VERSION') || define('APP_VERSION', '2.0.2');
 
 require_once APP_ROOT . '/config/database.php';
 require_once APP_ROOT . '/includes/helpers.php';

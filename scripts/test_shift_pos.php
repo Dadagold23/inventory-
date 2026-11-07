@@ -384,11 +384,13 @@ $voidWithSales = shiftVoidIfEmpty($pdo, (int) $open['shift_id'], $companyId);
 check('a shift with sales cannot be voided', !$voidWithSales['success'] && str_contains($voidWithSales['message'], 'close'), json_encode($voidWithSales['message']));
 
 // another cashier may not close someone else's shift
-$theirs = shiftOpen($pdo, $cashierId, $companyId, $branchId, 20.0);
-$created['shifts'][] = $theirs['shift_id'];
 asUser($pdo, $otherUserId, 'shifttest.other', 'Other User', 'staff');
+$theirs = shiftOpen($pdo, $otherUserId, $companyId, $branchId, 20.0);
+$created['shifts'][] = $theirs['shift_id'];
+asUser($pdo, $cashierId, 'shifttest.cashier', 'Shift Test Cashier', 'cashier');
 $notMine = shiftClose($pdo, (int) $theirs['shift_id'], $companyId, 20.0, 'takeover');
 check('another cashier cannot close my shift', !$notMine['success'], json_encode($notMine['message']));
+check('cashier cannot read another cashier shift', shiftGet($pdo, (int) $theirs['shift_id'], $companyId) === null);
 asUser($pdo, $managerId, 'admin', 'Admin', 'admin');
 $forced = shiftClose($pdo, (int) $theirs['shift_id'], $companyId, null, 'manager cleanup', true);
 check('a manager can force close', $forced['success'], json_encode($forced['message']));
@@ -397,6 +399,7 @@ check('force close is flagged and leaves variance unknown',
     $forcedRow && (int) $forcedRow['force_closed'] === 1 && $forcedRow['variance'] === null);
 
 // empty shift can be voided
+asUser($pdo, $otherUserId, 'shifttest.other', 'Other Test User', 'staff');
 $empty = shiftOpen($pdo, $otherUserId, $companyId, $branchId, 0.0);
 $created['shifts'][] = $empty['shift_id'];
 $voided = shiftVoidIfEmpty($pdo, (int) $empty['shift_id'], $companyId);
@@ -404,6 +407,7 @@ check('an untouched shift can be voided', $voided['success'], json_encode($voide
 check('voided shift is gone', $shiftRow((int) $empty['shift_id']) === null);
 
 // enforcement switch
+asUser($pdo, $managerId, 'admin', 'Admin', 'admin');
 $pdo->prepare("INSERT INTO settings (`key`, value, company_id) VALUES ('pos_requires_shift', '0', ?)
                ON DUPLICATE KEY UPDATE value = '0'")->execute([$companyId]);
 asUser($pdo, $otherUserId, 'shifttest.other', 'Other User', 'staff');
@@ -427,6 +431,7 @@ check('enforcement is restored through the admin path', shiftEnforcementEnabled(
 $summary = shiftSummaryForUser($pdo, $companyId, $branchId);
 check('summary reports no open shift for that user', $summary['open'] === false && $summary['allowed'] === false, json_encode($summary));
 
+asUser($pdo, $managerId, 'admin', 'Admin', 'admin');
 posClearCart();
 $list = shiftList($pdo, $companyId, ['status' => 'closed']);
 $allClosed = $list !== [] && count(array_filter($list, static fn ($r) => $r['status'] === 'closed')) === count($list);

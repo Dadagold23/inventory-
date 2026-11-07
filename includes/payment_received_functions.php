@@ -11,22 +11,29 @@ if (!defined('APP_ROOT')) {
 }
 require_once APP_ROOT . '/config/database.php';
 require_once APP_ROOT . '/includes/helpers.php';
+require_once APP_ROOT . '/includes/auth_helpers.php';
 
 /**
  * List payments received with customer and invoice context.
  */
 function getPaymentsReceivedByCompany(PDO $pdo, int $companyId = 1): array
 {
+    $scopeUserId = auth_sales_scope_user_id();
+    $scopeSql = $scopeUserId === null ? '' : ' AND si.created_by = ?';
+    $params = [$companyId];
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare(
         "SELECT cp.*, c.name AS customer_name,
                 si.invoice_number, si.total_amount AS invoice_total, si.currency AS invoice_currency
          FROM customer_payments cp
          LEFT JOIN customers c ON cp.customer_id = c.customer_id
          LEFT JOIN sales_invoices si ON cp.invoice_id = si.invoice_id
-         WHERE cp.company_id = ?
+         WHERE cp.company_id = ? $scopeSql
          ORDER BY cp.payment_date DESC, cp.payment_id DESC"
     );
-    $stmt->execute([$companyId]);
+    $stmt->execute($params);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -35,8 +42,18 @@ function getPaymentsReceivedByCompany(PDO $pdo, int $companyId = 1): array
  */
 function getPaymentById(PDO $pdo, int $paymentId): ?array
 {
-    $stmt = $pdo->prepare('SELECT * FROM customer_payments WHERE payment_id = ?');
-    $stmt->execute([$paymentId]);
+    $companyId = function_exists('auth_company_id') ? auth_company_id() : 1;
+    $scopeUserId = auth_sales_scope_user_id();
+    $sql = 'SELECT cp.* FROM customer_payments cp
+            LEFT JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
+            WHERE cp.payment_id = ? AND cp.company_id = ?';
+    $params = [$paymentId, $companyId];
+    if ($scopeUserId !== null) {
+        $sql .= ' AND si.created_by = ?';
+        $params[] = $scopeUserId;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return $row ?: null;
 }
@@ -55,11 +72,16 @@ function recordPaymentReceived(PDO $pdo, array $paymentData): int
         return 0;
     }
 
-    $check = $pdo->prepare(
-        'SELECT customer_id, company_id, status, currency, exchange_rate
-         FROM sales_invoices WHERE invoice_id = ?'
-    );
-    $check->execute([$invoiceId]);
+    $scopeUserId = auth_sales_scope_user_id();
+    $checkSql = 'SELECT customer_id, company_id, status, currency, exchange_rate
+                 FROM sales_invoices WHERE invoice_id = ? AND company_id = ?';
+    $checkParams = [$invoiceId, $companyId];
+    if ($scopeUserId !== null) {
+        $checkSql .= ' AND created_by = ?';
+        $checkParams[] = $scopeUserId;
+    }
+    $check = $pdo->prepare($checkSql);
+    $check->execute($checkParams);
     $invoice = $check->fetch(PDO::FETCH_ASSOC);
     if (!$invoice
         || (int) $invoice['company_id'] !== $companyId
@@ -154,17 +176,23 @@ function refreshInvoicePaymentStatus(PDO $pdo, int $invoiceId): void
  */
 function getOutstandingReceivables(PDO $pdo, int $companyId = 1): array
 {
+    $scopeUserId = auth_sales_scope_user_id();
+    $scopeSql = $scopeUserId === null ? '' : ' AND si.created_by = ?';
+    $params = [$companyId];
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare(
         "SELECT c.customer_id, c.name AS customer_name,
                 SUM(si.base_amount_owed) AS outstanding_amount
          FROM sales_invoices si
          INNER JOIN customers c ON c.customer_id = si.customer_id
-         WHERE si.company_id = ? AND si.status IN ('pending', 'partial')
+         WHERE si.company_id = ? AND si.status IN ('pending', 'partial') $scopeSql
          GROUP BY c.customer_id, c.name
          HAVING outstanding_amount > 0
          ORDER BY outstanding_amount DESC"
     );
-    $stmt->execute([$companyId]);
+    $stmt->execute($params);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -173,13 +201,20 @@ function getOutstandingReceivables(PDO $pdo, int $companyId = 1): array
  */
 function getPaymentSummaryByMethod(PDO $pdo, int $companyId = 1): array
 {
+    $scopeUserId = auth_sales_scope_user_id();
+    $scopeSql = $scopeUserId === null ? '' : ' AND si.created_by = ?';
+    $params = [$companyId];
+    if ($scopeUserId !== null) {
+        $params[] = $scopeUserId;
+    }
     $stmt = $pdo->prepare(
-        'SELECT payment_method, COUNT(*) AS transaction_count, SUM(base_amount) AS total_amount
-         FROM customer_payments
-         WHERE company_id = ?
+        'SELECT cp.payment_method, COUNT(*) AS transaction_count, SUM(cp.base_amount) AS total_amount
+         FROM customer_payments cp
+         INNER JOIN sales_invoices si ON si.invoice_id = cp.invoice_id
+         WHERE cp.company_id = ?' . $scopeSql . '
          GROUP BY payment_method'
     );
-    $stmt->execute([$companyId]);
+    $stmt->execute($params);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 

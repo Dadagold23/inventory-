@@ -325,3 +325,6 @@
 [2026-11-07 16:32:42] ERROR: Call to undefined function getCompanyCurrency() {"file":"C:\\xampp\\htdocs\\inventory\\dashboard.php","line":40,"trace":"#0 {main}"}
 [2026-11-07 16:33:03] ERROR: Call to undefined function getCompanyCurrency() {"file":"C:\\xampp\\htdocs\\inventory\\dashboard.php","line":40,"trace":"#0 {main}"}
 [2026-11-07 16:33:49] ERROR: Call to undefined function getCompanyCurrency() {"file":"C:\\xampp\\htdocs\\inventory\\dashboard.php","line":40,"trace":"#0 {main}"}
+[2026-11-07 18:36:36] WARNING: Sales invoice creation failed: Insufficient stock for "x". Available: 50.00.
+[2026-11-07 18:40:50] WARNING: Sales invoice creation failed: Insufficient stock for "x". Available: 50.00.
+[2026-11-07 18:55:02] WARNING: Sales invoice creation failed: Insufficient stock for "x". Available: 50.00.

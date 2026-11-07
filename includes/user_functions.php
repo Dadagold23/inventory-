@@ -34,10 +34,12 @@ function adminListUsers(PDO $pdo, int $companyId): array
 {
     $stmt = $pdo->prepare(
         'SELECT u.user_id, u.username, u.email, u.full_name, u.role, u.company_id, u.branch_id,
-                u.is_active, u.last_login, u.lock_until, r.name AS role_name, b.name AS branch_name
+                u.department_id, u.is_active, u.last_login, u.lock_until, r.name AS role_name,
+                b.name AS branch_name, d.name AS department_name
          FROM users u
          LEFT JOIN roles r ON r.role_key = u.role
          LEFT JOIN branches b ON b.branch_id = u.branch_id
+         LEFT JOIN departments d ON d.department_id = u.department_id
          WHERE u.company_id = ?
          ORDER BY u.is_active DESC, u.username'
     );
@@ -75,6 +77,7 @@ function adminCreateUser(PDO $pdo, int $companyId, array $data): array
     $role = trim((string) ($data['role'] ?? 'staff'));
     $password = (string) ($data['password'] ?? '');
     $branchId = (int) ($data['branch_id'] ?? 0);
+    $departmentId = (int) ($data['department_id'] ?? 0);
 
     if ($username === '' || !preg_match('/^[A-Za-z0-9_.-]{3,50}$/', $username)) {
         return ['ok' => false, 'message' => 'Username must be 3-50 characters (letters, numbers, dot, dash, underscore).'];
@@ -102,15 +105,22 @@ function adminCreateUser(PDO $pdo, int $companyId, array $data): array
             return ['ok' => false, 'message' => 'The selected branch does not belong to this company.'];
         }
     }
+    if ($departmentId > 0) {
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM departments WHERE department_id = ? AND company_id = ? AND is_active = 1');
+        $stmt->execute([$departmentId, $companyId]);
+        if ((int) $stmt->fetchColumn() === 0) {
+            return ['ok' => false, 'message' => 'The selected department does not belong to this company or is inactive.'];
+        }
+    }
 
     $stmt = $pdo->prepare(
-        'INSERT INTO users (username, email, full_name, password_hash, role, company_id, branch_id, is_active, password_changed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())'
+        'INSERT INTO users (username, email, full_name, password_hash, role, company_id, branch_id, department_id, is_active, password_changed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())'
     );
     $stmt->execute([
         $username, $email, $fullName !== '' ? $fullName : $username,
         password_hash($password, PASSWORD_DEFAULT), $role, $companyId,
-        $branchId > 0 ? $branchId : null,
+        $branchId > 0 ? $branchId : null, $departmentId > 0 ? $departmentId : null,
     ]);
     $userId = (int) $pdo->lastInsertId();
 
@@ -135,6 +145,7 @@ function adminUpdateUser(PDO $pdo, int $userId, int $companyId, array $data): ar
     $fullName = trim((string) ($data['full_name'] ?? $target['full_name']));
     $role = trim((string) ($data['role'] ?? $target['role']));
     $branchId = (int) ($data['branch_id'] ?? 0);
+    $departmentId = (int) ($data['department_id'] ?? ($target['department_id'] ?? 0));
     $isActive = !empty($data['is_active']) ? 1 : 0;
 
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -153,6 +164,13 @@ function adminUpdateUser(PDO $pdo, int $userId, int $companyId, array $data): ar
         $stmt->execute([$branchId, $companyId]);
         if ((int) $stmt->fetchColumn() === 0) {
             return ['ok' => false, 'message' => 'The selected branch does not belong to this company.'];
+        }
+    }
+    if ($departmentId > 0) {
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM departments WHERE department_id = ? AND company_id = ? AND is_active = 1');
+        $stmt->execute([$departmentId, $companyId]);
+        if ((int) $stmt->fetchColumn() === 0) {
+            return ['ok' => false, 'message' => 'The selected department does not belong to this company or is inactive.'];
         }
     }
 
@@ -179,12 +197,12 @@ function adminUpdateUser(PDO $pdo, int $userId, int $companyId, array $data): ar
     }
 
     $stmt = $pdo->prepare(
-        'UPDATE users SET email = ?, full_name = ?, role = ?, branch_id = ?, is_active = ?, updated_at = NOW()
+        'UPDATE users SET email = ?, full_name = ?, role = ?, branch_id = ?, department_id = ?, is_active = ?, updated_at = NOW()
          WHERE user_id = ? AND company_id = ?'
     );
     $stmt->execute([
         $email, $fullName !== '' ? $fullName : $target['username'], $role,
-        $branchId > 0 ? $branchId : null, $isActive, $userId, $companyId,
+        $branchId > 0 ? $branchId : null, $departmentId > 0 ? $departmentId : null, $isActive, $userId, $companyId,
     ]);
 
     adminApplyUserBranches($pdo, $userId, $companyId, (array) ($data['branch_access'] ?? []));

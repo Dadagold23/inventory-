@@ -18,6 +18,9 @@ if (!$pdo instanceof PDO) {
 
 $companyId = auth_company_id();
 $user = auth_user();
+$salesUserScope = auth_can_view_company_sales_dashboard()
+    ? null
+    : (int) ($user['user_id'] ?? 0);
 
 $companyName = APP_NAME;
 try {
@@ -31,11 +34,11 @@ try {
     $companyName = APP_NAME;
 }
 
-$summary = getDashboardSummary($pdo, $companyId);
-$recentInvoices = getRecentSalesInvoices($pdo, $companyId, 5);
+$summary = getDashboardSummary($pdo, $companyId, $salesUserScope);
+$recentInvoices = getRecentSalesInvoices($pdo, $companyId, 5, $salesUserScope);
 $lowStock = getLowStockProducts($pdo, $companyId, 5);
-$monthlyTrend = getDashboardMonthlyTrend($pdo, $companyId, 6);
-$invoiceStatus = getDashboardInvoiceStatusBreakdown($pdo, $companyId);
+$monthlyTrend = getDashboardMonthlyTrend($pdo, $companyId, 6, $salesUserScope);
+$invoiceStatus = getDashboardInvoiceStatusBreakdown($pdo, $companyId, $salesUserScope);
 $pageTitle = 'Dashboard';
 
 $companyCurrency = getCompanyCurrency($pdo);
